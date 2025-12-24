@@ -11,7 +11,7 @@ import SwiftUI
 struct GasProtectionServiceApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            RegistrationScreen()
         }
     }
 }
