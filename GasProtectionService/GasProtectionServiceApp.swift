@@ -9,9 +9,20 @@ import SwiftUI
 
 @main
 struct GasProtectionServiceApp: App {
+    @StateObject private var appState = AppState()
+
     var body: some Scene {
         WindowGroup {
-            RegistrationScreen()
+            ZStack {
+                if appState.isLoggedIn {
+                    TabBarView()
+                        .environmentObject(appState)
+                } else {
+                    LoginView()
+                        .environmentObject(appState)
+                }
+            }
+            .preferredColorScheme(appState.theme.colorScheme)
         }
     }
 }

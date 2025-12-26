@@ -7,13 +7,11 @@
 
 import SwiftUI
 
-struct RegistrationScreen: View {
-    @State private var email = ""
-    @State private var password = ""
-    @State private var isPasswordVisible = false
-    @State private var alertMessage = ""
-    @State private var isLoading = false
-    @State private var showCustomAlert = false
+struct LoginView: View {
+    @EnvironmentObject var appState: AppState
+    @StateObject private var controller = AuthenticationController()
+    @State private var showRegistration = false
+    @State private var showPassword = false
 
     var body: some View {
         NavigationView {
@@ -45,13 +43,13 @@ struct RegistrationScreen: View {
                                 .font(.headline)
                                 .foregroundColor(.primary)
 
-                            TextField("Введіть ваш email", text: $email)
+                            TextField("Введіть ваш email", text: $controller.credentials.email)
                                 .padding()
                                 .background(Color(.systemGray6))
                                 .cornerRadius(12)
                                 .keyboardType(.emailAddress)
                                 .autocapitalization(.none)
-                                .disabled(isLoading)
+                                .disabled(controller.isLoading)
                         }
 
                         // Password Field
@@ -61,21 +59,21 @@ struct RegistrationScreen: View {
                                 .foregroundColor(.primary)
 
                             HStack {
-                                if isPasswordVisible {
-                                    TextField("Введіть пароль", text: $password)
-                                        .disabled(isLoading)
+                                if showPassword {
+                                    TextField("Введіть пароль", text: $controller.credentials.password)
+                                        .disabled(controller.isLoading)
                                 } else {
-                                    SecureField("Введіть пароль", text: $password)
-                                        .disabled(isLoading)
+                                    SecureField("Введіть пароль", text: $controller.credentials.password)
+                                        .disabled(controller.isLoading)
                                 }
 
                                 Button(action: {
-                                    isPasswordVisible.toggle()
+                                    showPassword.toggle()
                                 }) {
-                                    Image(systemName: isPasswordVisible ? "eye.slash" : "eye")
+                                    Image(systemName: showPassword ? "eye.slash" : "eye")
                                         .foregroundColor(.gray)
                                 }
-                                .disabled(isLoading)
+                                .disabled(controller.isLoading)
                             }
                             .padding()
                             .background(Color(.systemGray6))
@@ -85,8 +83,17 @@ struct RegistrationScreen: View {
                     .padding(.horizontal)
 
                     // Login Button
-                    Button(action: loginUser) {
-                        if isLoading {
+                    Button(action: {
+                        controller.loginUser { result in
+                            switch result {
+                            case .success(let user):
+                                appState.login(with: user)
+                            case .failure(let error):
+                                print("Login error: \(error.localizedDescription)")
+                            }
+                        }
+                    }) {
+                        if controller.isLoading {
                             ProgressView()
                                 .progressViewStyle(CircularProgressViewStyle(tint: .white))
                         } else {
@@ -100,37 +107,52 @@ struct RegistrationScreen: View {
                     .background(Color.blue)
                     .cornerRadius(12)
                     .padding(.horizontal)
-                    .disabled(isLoading)
+                    .disabled(controller.isLoading)
+
+                    // Registration Button
+                    Button(action: {
+                        showRegistration = true
+                    }) {
+                        Text("Реєстрація")
+                            .font(.headline)
+                            .foregroundColor(.blue)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.clear)
+                    .cornerRadius(12)
+                    .padding(.horizontal)
+                    .disabled(controller.isLoading)
 
                     Spacer()
                 }
                 .padding()
 
                 // Custom Alert
-                if showCustomAlert {
-                    Color.black.opacity(0.4)
-                        .edgesIgnoringSafeArea(.all)
+                if controller.showCustomAlert {
+                    Rectangle()
+                        .fill(Color.black.opacity(0.4))
+                        .ignoresSafeArea()
+                        .contentShape(Rectangle())
                         .onTapGesture {
-                            showCustomAlert = false
+                            controller.dismissAlert()
                         }
 
                     VStack(spacing: 20) {
                         VStack(spacing: 10) {
-                            Text("Помилка")
+                            Text("Повідомлення")
                                 .font(.headline)
                                 .foregroundColor(.primary)
                                 .multilineTextAlignment(.center)
 
-                            Text(alertMessage)
+                            Text(controller.alertMessage)
                                 .font(.body)
                                 .foregroundColor(.secondary)
                                 .multilineTextAlignment(.center)
                                 .padding(.horizontal)
                         }
 
-                        Button(action: {
-                            showCustomAlert = false
-                        }) {
+                        Button(action: controller.dismissAlert) {
                             Text("OK")
                                 .font(.headline)
                                 .foregroundColor(.white)
@@ -149,62 +171,16 @@ struct RegistrationScreen: View {
                 }
             }
             .navigationBarHidden(true)
-        }
-    }
-
-    private func loginUser() {
-        isLoading = true
-
-        // Basic validation
-        guard !email.trimmingCharacters(in: .whitespaces).isEmpty else {
-            alertMessage = "Будь ласка, введіть email"
-            showCustomAlert = true
-            isLoading = false
-            return
-        }
-
-        guard isValidEmail(email) else {
-            alertMessage = "Будь ласка, введіть коректний email"
-            showCustomAlert = true
-            isLoading = false
-            return
-        }
-
-        guard !password.isEmpty else {
-            alertMessage = "Будь ласка, введіть пароль"
-            showCustomAlert = true
-            isLoading = false
-            return
-        }
-
-        // Simulate login process (replace with actual API call)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            self.isLoading = false
-
-            // Here you would typically authenticate with your backend
-            print("Спроба входу:")
-            print("Email: \(self.email)")
-
-            // For demo purposes, accept any valid email/password combination
-            // In real app, you would check against your backend
-            if self.email.contains("@") && self.password.count >= 4 {
-                self.alertMessage = "Вхід успішний!"
-                self.showCustomAlert = true
-                // Here you would navigate to main app screen
-            } else {
-                self.alertMessage = "Невірний email або пароль"
-                self.showCustomAlert = true
+            .fullScreenCover(isPresented: $showRegistration) {
+                RegistrationView(isPresented: $showRegistration)
+                    .environmentObject(appState)
             }
         }
     }
 
-    private func isValidEmail(_ email: String) -> Bool {
-        let emailRegex = "[A-Z0-9a-z._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,64}"
-        let emailPredicate = NSPredicate(format:"SELF MATCHES %@", emailRegex)
-        return emailPredicate.evaluate(with: email)
-    }
 }
 
 #Preview {
-    RegistrationScreen()
+    LoginView()
+        .environmentObject(AppState())
 }
