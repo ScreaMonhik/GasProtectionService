@@ -33,7 +33,7 @@ class CheckController: ObservableObject {
     }
 
     func addCommand(_ command: CheckCommand) {
-        commands.append(command)
+        commands.insert(command, at: 0)
     }
 
     func updateCommand(_ command: CheckCommand) {

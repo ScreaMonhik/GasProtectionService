@@ -12,7 +12,7 @@ struct LoginView: View {
     @StateObject private var controller = AuthenticationController()
     @State private var showRegistration = false
     @State private var showPassword = false
-
+    
     var body: some View {
         NavigationView {
             ZStack {
@@ -23,18 +23,18 @@ struct LoginView: View {
                             .resizable()
                             .frame(width: 80, height: 80)
                             .foregroundColor(.blue)
-
+                        
                         Text("ГДЗС")
                             .font(.title)
                             .fontWeight(.bold)
                             .foregroundColor(.primary)
-
+                        
                         Text("Вхід в систему")
                             .font(.subheadline)
                             .foregroundColor(.secondary)
                     }
                     .padding(.top, 0)
-
+                    
                     // Form Fields
                     VStack(spacing: 20) {
                         // Email Field
@@ -42,7 +42,7 @@ struct LoginView: View {
                             Text("Електронна пошта")
                                 .font(.headline)
                                 .foregroundColor(.primary)
-
+                            
                             TextField("Введіть ваш email", text: $controller.credentials.email)
                                 .padding()
                                 .background(Color(.systemGray6))
@@ -51,13 +51,13 @@ struct LoginView: View {
                                 .autocapitalization(.none)
                                 .disabled(controller.isLoading)
                         }
-
+                        
                         // Password Field
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Пароль")
                                 .font(.headline)
                                 .foregroundColor(.primary)
-
+                            
                             HStack {
                                 if showPassword {
                                     TextField("Введіть пароль", text: $controller.credentials.password)
@@ -66,7 +66,7 @@ struct LoginView: View {
                                     SecureField("Введіть пароль", text: $controller.credentials.password)
                                         .disabled(controller.isLoading)
                                 }
-
+                                
                                 Button(action: {
                                     showPassword.toggle()
                                 }) {
@@ -81,7 +81,7 @@ struct LoginView: View {
                         }
                     }
                     .padding(.horizontal)
-
+                    
                     // Login Button
                     Button(action: {
                         controller.loginUser { result in
@@ -108,7 +108,7 @@ struct LoginView: View {
                     .cornerRadius(12)
                     .padding(.horizontal)
                     .disabled(controller.isLoading)
-
+                    
                     // Registration Button
                     Button(action: {
                         showRegistration = true
@@ -123,64 +123,66 @@ struct LoginView: View {
                     .cornerRadius(12)
                     .padding(.horizontal)
                     .disabled(controller.isLoading)
-
+                    
                     Spacer()
                 }
                 .padding()
-
+                
                 // Custom Alert
                 if controller.showCustomAlert {
-                    Rectangle()
-                        .fill(Color.black.opacity(0.4))
-                        .ignoresSafeArea()
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            controller.dismissAlert()
-                        }
+                    ZStack {
+                        // Background overlay
+                        Color.black.opacity(0.4)
+                            .ignoresSafeArea()
+                            .onTapGesture {
+                                controller.dismissAlert()
+                            }
 
-                    VStack(spacing: 20) {
-                        VStack(spacing: 10) {
-                            Text("Повідомлення")
-                                .font(.headline)
-                                .foregroundColor(.primary)
-                                .multilineTextAlignment(.center)
+                        // Alert content
+                        VStack(spacing: 20) {
+                            VStack(spacing: 10) {
+                                Text("Повідомлення")
+                                    .font(.headline)
+                                    .foregroundColor(.primary)
+                                    .multilineTextAlignment(.center)
 
-                            Text(controller.alertMessage)
-                                .font(.body)
-                                .foregroundColor(.secondary)
-                                .multilineTextAlignment(.center)
-                                .padding(.horizontal)
-                        }
+                                Text(controller.alertMessage)
+                                    .font(.body)
+                                    .foregroundColor(.secondary)
+                                    .multilineTextAlignment(.center)
+                                    .padding(.horizontal)
+                            }
 
-                        Button(action: controller.dismissAlert) {
-                            Text("OK")
-                                .font(.headline)
-                                .foregroundColor(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(Color.blue)
-                                .cornerRadius(10)
+                            Button(action: controller.dismissAlert) {
+                                Text("OK")
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding()
+                                    .background(Color.blue)
+                                    .cornerRadius(10)
+                            }
+                            .padding(.horizontal)
                         }
-                        .padding(.horizontal)
+                        .frame(maxWidth: 300)
+                        .padding()
+                        .background(Color(.systemBackground))
+                        .cornerRadius(15)
+                        .shadow(radius: 10)
                     }
-                    .frame(maxWidth: 300)
-                    .padding()
-                    .background(Color(.systemBackground))
-                    .cornerRadius(15)
-                    .shadow(radius: 10)
                 }
             }
             .navigationBarHidden(true)
+            .hideKeyboardOnTapAndSwipe()
             .fullScreenCover(isPresented: $showRegistration) {
                 RegistrationView(isPresented: $showRegistration)
                     .environmentObject(appState)
             }
         }
     }
-
 }
 
-#Preview {
-    LoginView()
-        .environmentObject(AppState())
-}
+    #Preview {
+        LoginView()
+            .environmentObject(AppState())
+    }

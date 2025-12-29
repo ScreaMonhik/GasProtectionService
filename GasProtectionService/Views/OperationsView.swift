@@ -10,6 +10,8 @@ import SwiftUI
 struct OperationsView: View {
     @EnvironmentObject var appState: AppState
     @State private var isCreatingCommand = false
+    @State private var selectedCommand: CheckCommand?
+
 
     var body: some View {
         VStack(spacing: 0) {
@@ -41,6 +43,9 @@ struct OperationsView: View {
                     LazyVStack(spacing: 16) {
                         ForEach(appState.checkController.teamCommands) { command in
                             OperationCommandCard(command: command)
+                                .onTapGesture {
+                                    selectedCommand = command
+                                }
                         }
                     }
                     .padding(.horizontal)
@@ -64,6 +69,12 @@ struct OperationsView: View {
             .padding(.bottom, 32)
         }
         .background(Color(.systemBackground))
+        .fullScreenCover(item: $selectedCommand) { command in
+            OperationsCalculatorView(availableCommand: command) { updatedCommand in
+                appState.checkController.updateCommand(updatedCommand)
+                selectedCommand = nil
+            }
+        }
         .fullScreenCover(isPresented: $isCreatingCommand) {
             OperationsCalculatorView { command in
                 appState.checkController.addCommand(command)
@@ -157,7 +168,11 @@ struct OperationCard: View {
                 ForEach(operation.members.filter { $0.isActive }) { member in
                     HStack {
                         Image(systemName: member.role.iconName)
-                            .foregroundColor(Color(member.role.iconColor))
+                            .foregroundColor(
+                                member.role.iconColor == "systemOrange" ? .orange :
+                                member.role.iconColor == "systemRed" ? .red :
+                                member.role.iconColor == "systemGreen" ? .green : .gray
+                            )
 
                         Text(member.fullName)
                             .font(.body)

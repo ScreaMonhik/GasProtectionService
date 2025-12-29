@@ -8,9 +8,15 @@
 import SwiftUI
 
 struct OperationsCalculatorView: View {
-    @StateObject private var controller = OperationCreationController()
+    @StateObject private var controller: OperationCreationController
     @Environment(\.presentationMode) var presentationMode
+    @State private var isWorking = false
     var onSave: (CheckCommand) -> Void
+
+    init(availableCommand: CheckCommand? = nil, onSave: @escaping (CheckCommand) -> Void) {
+        self.onSave = onSave
+        _controller = StateObject(wrappedValue: OperationCreationController(availableCommand: availableCommand))
+    }
 
     var body: some View {
         NavigationView {
@@ -23,6 +29,10 @@ struct OperationsCalculatorView: View {
                                 .font(.title)
                                 .fontWeight(.bold)
                                 .foregroundColor(.primary)
+
+                            Text("Створення операції")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
                         }
                         .padding(.top)
 
@@ -36,7 +46,7 @@ struct OperationsCalculatorView: View {
                                 controller.showingOperationTypePicker.toggle()
                             }) {
                                 HStack {
-                                    Text(controller.operation.operationType.displayName)
+                                    Text(controller.newCommand.operationType.displayName)
                                         .foregroundColor(.primary)
                                     Spacer()
                                     Image(systemName: "chevron.down")
@@ -49,28 +59,30 @@ struct OperationsCalculatorView: View {
                         }
                         .padding(.horizontal)
 
-                        // Device Type
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Тип апарату:")
-                                .font(.headline)
-                                .foregroundColor(.primary)
+                        // Device Type (only show when creating new)
+                        if !controller.isEditingExisting {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Тип апарату:")
+                                    .font(.headline)
+                                    .foregroundColor(.primary)
 
-                            Button(action: {
-                                controller.showingDevicePicker.toggle()
-                            }) {
-                                HStack {
-                                    Text(controller.operation.deviceType.displayName)
-                                        .foregroundColor(.primary)
-                                    Spacer()
-                                    Image(systemName: "chevron.down")
-                                        .foregroundColor(.gray)
+                                Button(action: {
+                                    controller.showingDevicePicker.toggle()
+                                }) {
+                                    HStack {
+                                        Text(controller.newCommand.deviceType.displayName)
+                                            .foregroundColor(.primary)
+                                        Spacer()
+                                        Image(systemName: "chevron.down")
+                                            .foregroundColor(.gray)
+                                    }
+                                    .padding()
+                                    .background(Color(.systemGray6))
+                                    .cornerRadius(12)
                                 }
-                                .padding()
-                                .background(Color(.systemGray6))
-                                .cornerRadius(12)
                             }
+                            .padding(.horizontal)
                         }
-                        .padding(.horizontal)
 
                         // Team Members Section
                         VStack(alignment: .leading, spacing: 16) {
@@ -78,51 +90,41 @@ struct OperationsCalculatorView: View {
                                 .font(.headline)
                                 .foregroundColor(.primary)
 
-                            ForEach(controller.operation.members.indices, id: \.self) { index in
+                            ForEach(controller.newCommand.members.indices, id: \.self) { index in
                                 OperationMemberRow(
-                                    member: $controller.operation.members[index],
+                                    member: $controller.newCommand.members[index],
                                     onRoleTap: {
                                         controller.showRolePicker(for: index)
                                     },
                                     onActiveToggle: {
                                         controller.toggleMemberActive(index)
-                                    }
+                                    },
+                                    onDelete: {
+                                        controller.removeMemberAt(index)
+                                    },
+                                    canDelete: controller.canRemoveMemberAt(index)
                                 )
                                 .id(index)
                             }
                         }
                         .padding(.horizontal)
 
-                        // Add/Remove Buttons
-                        HStack(spacing: 16) {
-                            Button(action: {
-                                controller.addMember()
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                    withAnimation {
-                                        scrollView.scrollTo(controller.operation.members.count - 1, anchor: .bottom)
-                                    }
+                        // Add Button
+                        Button(action: {
+                            controller.addMember()
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                withAnimation {
+                                    scrollView.scrollTo(controller.newCommand.members.count - 1, anchor: .bottom)
                                 }
-                            }) {
-                                Text("Додати")
-                                    .font(.headline)
-                                    .foregroundColor(.white)
-                                    .frame(maxWidth: .infinity)
-                                    .padding()
-                                    .background(Color.blue)
-                                    .cornerRadius(12)
                             }
-
-                            Button(action: controller.removeMember) {
-                                Text("Видалити")
-                                    .font(.headline)
-                                    .foregroundColor(.white)
-                                    .frame(maxWidth: .infinity)
-                                    .padding()
-                                    .background(Color.red)
-                                    .cornerRadius(12)
-                            }
-                            .disabled(!controller.canRemoveMember())
-                            .opacity(controller.canRemoveMember() ? 1.0 : 0.5)
+                        }) {
+                            Text("Додати")
+                                .font(.headline)
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(Color.blue)
+                                .cornerRadius(12)
                         }
                         .padding(.horizontal)
 
@@ -137,7 +139,7 @@ struct OperationsCalculatorView: View {
                                     .font(.body)
                                     .foregroundColor(.primary)
                                 Spacer()
-                                Toggle("", isOn: $controller.operation.settings.workBelowLimit)
+                                Toggle("", isOn: $controller.newCommand.settings.workBelowLimit)
                                     .labelsHidden()
                             }
 
@@ -148,9 +150,9 @@ struct OperationsCalculatorView: View {
                                     .foregroundColor(.primary)
 
                                 DatePicker(
-                                    controller.operation.formattedEntryTime,
+                                    controller.newCommand.formattedEntryTime,
                                     selection: Binding(
-                                        get: { controller.operation.settings.entryTime ?? Date() },
+                                        get: { controller.newCommand.settings.entryTime ?? Date() },
                                         set: { controller.setEntryTime($0) }
                                     ),
                                     displayedComponents: .hourAndMinute
@@ -166,21 +168,11 @@ struct OperationsCalculatorView: View {
                         // Start Work Button
                     Button(action: {
                         if controller.isValidOperation() {
-                            // Создаем ланку из операции
-                            let command = CheckCommand(
-                                commandName: "Операція \(controller.operation.operationType.displayName)",
-                                deviceType: controller.operation.deviceType,
-                                teamMembers: controller.operation.members.filter { $0.isActive }.map { member in
-                                    TeamMember(
-                                        fullName: member.fullName,
-                                        pressure: member.pressure,
-                                        hasRescueDevice: false // По умолчанию без рятівного пристрою
-                                    )
-                                },
-                                commandType: .operation
-                            )
-                            onSave(command)
-                            presentationMode.wrappedValue.dismiss()
+                            // Устанавливаем текущее время, если время входа не выбрано
+                            if controller.newCommand.settings.entryTime == nil {
+                                controller.newCommand.settings.entryTime = Date()
+                            }
+                            isWorking = true
                         }
                     }) {
                             Text("Почати роботу")
@@ -195,6 +187,7 @@ struct OperationsCalculatorView: View {
                         .padding(.bottom, 32)
                     }
                 }
+                .hideKeyboardOnTapAndSwipe()
                 .navigationBarItems(leading: Button(action: {
                     presentationMode.wrappedValue.dismiss()
                 }) {
@@ -205,15 +198,18 @@ struct OperationsCalculatorView: View {
                 .navigationBarTitle("", displayMode: .inline)
             }
             .sheet(isPresented: $controller.showingOperationTypePicker) {
-                OperationTypePickerView(selectedType: $controller.operation.operationType)
+                OperationTypePickerView(selectedType: $controller.newCommand.operationType)
             }
             .sheet(isPresented: $controller.showingDevicePicker) {
-                DevicePickerView(selectedDevice: $controller.operation.deviceType)
+                DevicePickerView(selectedDevice: $controller.newCommand.deviceType)
             }
             .sheet(isPresented: $controller.showingRolePicker) {
                 TeamRolePickerView(onRoleSelected: { role in
                     controller.selectRole(role)
                 })
+            }
+            .fullScreenCover(isPresented: $isWorking) {
+                OperationWorkView(operationData: controller.newCommand, onSave: onSave)
             }
         }
     }
@@ -224,18 +220,23 @@ struct OperationMemberRow: View {
     @Binding var member: OperationMember
     var onRoleTap: () -> Void
     var onActiveToggle: () -> Void
+    var onDelete: () -> Void
+    var canDelete: Bool
 
     var body: some View {
         HStack(spacing: 12) {
             // Role Icon
             Button(action: onRoleTap) {
-                Image(systemName: member.role.iconName)
-                    .font(.system(size: 24))
-                    .foregroundColor(Color(member.role.iconColor))
-                    .frame(width: 40, height: 40)
-                    .background(Color(.systemGray6))
-                    .clipShape(Circle())
+                ZStack {
+                    Circle()
+                        .fill(Color(.systemGray5))
+                        .frame(width: 40, height: 40)
+                    Image(systemName: member.role.iconName)
+                        .font(.system(size: 20))
+                        .foregroundStyle(member.role.color)
+                }
             }
+            .frame(width: 40, height: 40)
 
             // Active Toggle
             Button(action: onActiveToggle) {
@@ -258,6 +259,16 @@ struct OperationMemberRow: View {
                 .cornerRadius(8)
                 .frame(width: 80)
                 .keyboardType(.decimalPad)
+
+            // Delete Button
+            if canDelete {
+                Button(action: onDelete) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 20))
+                        .foregroundColor(.red)
+                        .frame(width: 40, height: 40)
+                }
+            }
         }
         .padding()
         .background(Color(.systemGray5).opacity(0.3))
@@ -310,7 +321,7 @@ struct TeamRolePickerView: View {
                 }) {
                     HStack {
                         Image(systemName: role.iconName)
-                            .foregroundColor(Color(role.iconColor))
+                            .foregroundStyle(role.color)
                             .frame(width: 30, height: 30)
                         Text(role.displayName)
                         Spacer()

@@ -8,8 +8,8 @@
 import Foundation
 
 enum CommandType: String, Codable {
-    case command // обычная ланка
-    case operation // операция
+    case command // для данных о ланке
+    case operation // для данных об операции
 }
 
 struct CheckCommand: Codable, Identifiable {
@@ -19,14 +19,16 @@ struct CheckCommand: Codable, Identifiable {
     var teamMembers: [TeamMember]
     let createdDate: Date
     var commandType: CommandType
+    var workAddress: String
 
-    init(commandName: String = "", deviceType: DeviceType = .dragerPSS3000, teamMembers: [TeamMember] = [], commandType: CommandType = .command) {
+    init(commandName: String = "", deviceType: DeviceType = .dragerPSS3000, teamMembers: [TeamMember] = [], commandType: CommandType = .command, workAddress: String = "") {
         self.id = UUID()
         self.commandName = commandName
         self.deviceType = deviceType
         self.teamMembers = teamMembers
         self.createdDate = Date()
         self.commandType = commandType
+        self.workAddress = workAddress
     }
 
     var formattedDate: String {
@@ -44,6 +46,19 @@ enum DeviceType: String, Codable, CaseIterable {
 
     var displayName: String {
         return self.rawValue
+    }
+
+    var protectionTimeMinutes: Int {
+        switch self {
+        case .dragerPSS3000:
+            return 35
+        case .dragerPSS4000:
+            return 40
+        case .asp2:
+            return 37
+        case .msa:
+            return 39
+        }
     }
 }
 

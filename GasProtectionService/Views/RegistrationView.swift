@@ -144,10 +144,8 @@ struct RegistrationView: View {
 
                 // Custom Alert
                 if controller.showCustomAlert {
-                    Rectangle()
-                        .fill(Color.black.opacity(0.4))
+                    Color.black.opacity(0.4)
                         .ignoresSafeArea(.all)
-                        .contentShape(Rectangle())
                         .onTapGesture {
                             controller.dismissAlert()
                         }
@@ -184,6 +182,10 @@ struct RegistrationView: View {
                     .shadow(radius: 10)
                 }
             }
+            .onTapGesture {
+                UIApplication.shared.endEditing()
+            }
+            .hideKeyboardOnTapAndSwipe()
             .navigationBarItems(leading: Button(action: {
                 isPresented = false
             }) {

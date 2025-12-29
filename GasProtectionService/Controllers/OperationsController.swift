@@ -52,30 +52,71 @@ class OperationsController: ObservableObject {
 
 // MARK: - Operation Creation Controller
 class OperationCreationController: ObservableObject {
-    @Published var operation = OperationData()
+    @Published var newCommand = OperationData()
     @Published var showingOperationTypePicker = false
     @Published var showingDevicePicker = false
     @Published var showingRolePicker = false
     @Published var rolePickerMemberIndex: Int?
+    @Published var isEditingExisting = false
+
+    init(availableCommand: CheckCommand? = nil) {
+        if let command = availableCommand {
+            isEditingExisting = true
+
+            // Пытаемся загрузить сохраненные данные операции
+            var loadedMembers = command.teamMembers.map { teamMember in
+                OperationMember(
+                    role: .firefighter, // По умолчанию
+                    fullName: teamMember.fullName,
+                    pressure: teamMember.pressure,
+                    isActive: true
+                )
+            }
+
+            // Если есть сохраненные данные операции, используем роли из них
+            if let workData = OperationWorkController.loadWorkDataForCommand(command.id) {
+                loadedMembers = workData.operationData.members
+            }
+
+            // Конвертируем CheckCommand в OperationData
+            newCommand = OperationData(
+                operationType: .fire, // По умолчанию
+                deviceType: command.deviceType,
+                members: loadedMembers
+            )
+        }
+    }
 
     // MARK: - Public Methods
 
     func addMember() {
-        operation.members.append(OperationMember())
+        newCommand.members.append(OperationMember())
     }
 
     func removeMember() {
-        if operation.members.count > 1 {
-            operation.members.removeLast()
+        if let lastActiveIndex = newCommand.members.lastIndex(where: { $0.isActive }) {
+            newCommand.members.remove(at: lastActiveIndex)
+        }
+    }
+
+    func removeMemberAt(_ index: Int) {
+        if index < newCommand.members.count {
+            newCommand.members.remove(at: index)
         }
     }
 
     func canRemoveMember() -> Bool {
-        return operation.members.count > 1
+        let activeMembers = newCommand.members.filter { $0.isActive }
+        return activeMembers.count > 2
+    }
+
+    func canRemoveMemberAt(_ index: Int) -> Bool {
+        let activeMembers = newCommand.members.filter { $0.isActive }
+        return activeMembers.count > 2
     }
 
     func toggleMemberActive(_ index: Int) {
-        operation.members[index].isActive.toggle()
+        newCommand.members[index].isActive.toggle()
     }
 
     func showRolePicker(for memberIndex: Int) {
@@ -85,18 +126,19 @@ class OperationCreationController: ObservableObject {
 
     func selectRole(_ role: TeamMemberRole) {
         if let index = rolePickerMemberIndex {
-            operation.members[index].role = role
+            newCommand.members[index].role = role
         }
         showingRolePicker = false
         rolePickerMemberIndex = nil
     }
 
     func setEntryTime(_ time: Date) {
-        operation.settings.entryTime = time
+        newCommand.settings.entryTime = time
     }
 
     func isValidOperation() -> Bool {
-        !operation.members.isEmpty &&
-        operation.members.contains { !$0.fullName.isEmpty }
+        let activeMembers = newCommand.members.filter { $0.isActive }
+        return activeMembers.count >= 2 &&
+               activeMembers.allSatisfy { !$0.fullName.isEmpty }
     }
 }

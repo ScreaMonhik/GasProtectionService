@@ -32,9 +32,9 @@ enum TeamMemberRole: String, Codable, CaseIterable {
     var iconName: String {
         switch self {
         case .firefighter:
-            return "person.fill"
+            return "flame.fill" 
         case .squadLeader:
-            return "person.badge.shield.checkmark.fill"
+            return "star.circle.fill"
         case .safetyPost:
             return "shield.checkerboard"
         }
@@ -43,11 +43,11 @@ enum TeamMemberRole: String, Codable, CaseIterable {
     var iconColor: String {
         switch self {
         case .firefighter:
-            return "blue"
+            return "systemOrange"
         case .squadLeader:
-            return "red"
+            return "systemRed"
         case .safetyPost:
-            return "green"
+            return "systemGreen"
         }
     }
 }
@@ -91,7 +91,7 @@ struct OperationData: Codable, Identifiable {
         self.createdDate = Date()
         self.operationType = operationType
         self.deviceType = deviceType
-        self.members = members.isEmpty ? [OperationMember()] : members
+        self.members = members.isEmpty ? [OperationMember(), OperationMember()] : members
         self.settings = OperationSettings()
     }
 
@@ -106,5 +106,74 @@ struct OperationData: Codable, Identifiable {
         let formatter = DateFormatter()
         formatter.dateFormat = "HH:mm"
         return formatter.string(from: time)
+    }
+}
+
+// MARK: - Operation Work Data
+struct OperationWorkData: Codable, Identifiable {
+    let id: UUID
+    let createdDate: Date
+    let operationData: OperationData
+
+    // Timers
+    var exitTimer: TimeInterval = 15 * 60 // 15 minutes
+    var remainingTimer: TimeInterval = 35 * 60 // 35 minutes
+    var communicationTimer: TimeInterval = 10 * 60 // 10 minutes
+
+    // States
+    var hasFoundFireSource: Bool = false
+    var isWorkingInDangerZone: Bool = false
+    var isExitingDangerZone: Bool = false
+
+    // Times
+    var fireSourceFoundTime: Date?
+    var dangerZoneStartTime: Date?
+    var dangerZoneExitTime: Date?
+
+    // Data
+    var lowestPressure: String = ""
+    var exitStartPressure: String = ""
+    var minimumExitPressure: String = ""
+
+    // Address
+    var workAddress: String = ""
+
+    init(operationData: OperationData) {
+        self.id = UUID()
+        self.createdDate = Date()
+        self.operationData = operationData
+    }
+
+    var formattedFireSourceFoundTime: String {
+        guard let time = fireSourceFoundTime else { return "--:--" }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: time)
+    }
+
+    var formattedDangerZoneStartTime: String {
+        guard let time = dangerZoneStartTime else { return "--:--" }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: time)
+    }
+    
+    var formattedDangerZoneExitTime: String {
+        guard let time = dangerZoneExitTime else { return "--:--" }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: time)
+    }
+
+    var expectedExitTime: String {
+        guard let entryTime = operationData.settings.entryTime else { return "--:--" }
+        let exitTime = entryTime.addingTimeInterval(30 * 60) // +30 minutes
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: exitTime)
+    }
+
+    var consumptionRate: String {
+        return "20,0 л/хв"
     }
 }

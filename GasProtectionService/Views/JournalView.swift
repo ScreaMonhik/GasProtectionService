@@ -9,6 +9,7 @@ import SwiftUI
 
 struct JournalView: View {
     @EnvironmentObject var appState: AppState
+    @State private var selectedCommand: CheckCommand?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -33,6 +34,9 @@ struct JournalView: View {
                     LazyVStack(spacing: 16) {
                         ForEach(appState.checkController.journalCommands) { command in
                             JournalCommandCard(command: command)
+                                .onTapGesture {
+                                    selectedCommand = command
+                                }
                         }
                     }
                     .padding(.horizontal)
@@ -41,6 +45,9 @@ struct JournalView: View {
             }
         }
         .background(Color(.systemBackground))
+        .fullScreenCover(item: $selectedCommand) { command in
+            OperationDetailsView(command: command)
+        }
     }
 }
 
@@ -71,6 +78,14 @@ struct JournalCommandCard: View {
                 Text(command.deviceType.displayName)
                     .font(.subheadline)
                     .foregroundColor(.secondary)
+            }
+
+            // Work Address (for operations)
+            if command.commandType == .operation && !command.workAddress.isEmpty {
+                Text("Адреса: \(command.workAddress)")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .padding(.top, 4)
             }
 
             // Team Members

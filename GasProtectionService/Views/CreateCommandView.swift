@@ -134,6 +134,7 @@ struct CreateCommandView: View {
                     }
                     .padding(.bottom, 32)
                 }
+                .hideKeyboardOnTapAndSwipe()
                 .navigationBarItems(leading: Button(action: {
                     presentationMode.wrappedValue.dismiss()
                 }) {
