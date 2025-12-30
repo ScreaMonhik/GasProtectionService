@@ -10,9 +10,22 @@
 		26D5C1F32EFBD1D500F28BF0 /* GasProtectionService.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GasProtectionService.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		267EAC2A2F03BE8500392E8F /* Exceptions for "GasProtectionService" folder in "GasProtectionService" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 26D5C1F22EFBD1D500F28BF0 /* GasProtectionService */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		26D5C1F52EFBD1D500F28BF0 /* GasProtectionService */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				267EAC2A2F03BE8500392E8F /* Exceptions for "GasProtectionService" folder in "GasProtectionService" target */,
+			);
 			path = GasProtectionService;
 			sourceTree = "<group>";
 		};
@@ -256,8 +269,10 @@
 				DEVELOPMENT_TEAM = X63T257KQM;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = GasProtectionService/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "ГДЗС";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Для визначення адреси роботи ланки";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -291,8 +306,10 @@
 				DEVELOPMENT_TEAM = X63T257KQM;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = GasProtectionService/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "ГДЗС";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Для визначення адреси роботи ланки";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

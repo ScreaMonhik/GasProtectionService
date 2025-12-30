@@ -278,6 +278,7 @@ struct OperationWorkView: View {
             .sheet(isPresented: $controller.showingAddressAlert) {
                 AddressInputView(
                     address: $controller.currentAddress,
+                    isLoadingLocation: $controller.isLoadingLocation,
                     onLocationTap: {
                         controller.getCurrentLocation()
                     },
@@ -326,6 +327,7 @@ struct OperationWorkView: View {
 // MARK: - Address Input View
 struct AddressInputView: View {
     @Binding var address: String
+    @Binding var isLoadingLocation: Bool
     var onLocationTap: () -> Void
     var onSave: () -> Void
     var onCancel: () -> Void
@@ -344,11 +346,19 @@ struct AddressInputView: View {
                         .padding(.horizontal)
 
                     Button(action: onLocationTap) {
-                        Image(systemName: "location.fill")
-                            .font(.system(size: 20))
-                            .foregroundColor(.blue)
-                            .frame(width: 44, height: 44)
+                        ZStack {
+                            if isLoadingLocation {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .blue))
+                            } else {
+                                Image(systemName: "location.fill")
+                                    .font(.system(size: 20))
+                                    .foregroundColor(.blue)
+                            }
+                        }
+                        .frame(width: 44, height: 44)
                     }
+                    .disabled(isLoadingLocation)
                 }
                 .padding(.horizontal)
 
@@ -414,4 +424,5 @@ struct TeamInfoView: View {
     return OperationWorkView(operationData: operationData) { command in
         print("Saved command: \(command.commandName)")
     }
+    .environment(\.locale, Locale(identifier: "uk"))
 }
