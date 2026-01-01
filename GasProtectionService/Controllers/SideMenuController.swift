@@ -23,6 +23,9 @@ class SideMenuController {
         case about
     }
 
+    // MARK: - Callbacks
+    var onShowAboutApp: (() -> Void)?
+
     // MARK: - Properties
 
     let menuItems: [MenuItem] = [
@@ -40,8 +43,9 @@ class SideMenuController {
         case .help:
             print("Navigate to help")
         case .about:
-            print("Information about App")
-            // TODO: Implement logout logic
+            print("About menu item tapped, calling callback")
+            onShowAboutApp?()
+            print("Callback called")
         }
     }
 }

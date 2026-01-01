@@ -11,6 +11,7 @@ struct TabBarView: View {
     @EnvironmentObject var appState: AppState
     @StateObject private var controller = MainScreenController()
     private let sideMenuController = SideMenuController()
+    @State private var showingAboutApp = false
 
     private var currentTabTitle: String {
         switch controller.selectedTab {
@@ -127,6 +128,14 @@ struct TabBarView: View {
             }
         }
         .navigationBarHidden(true)
+        .onAppear {
+            sideMenuController.onShowAboutApp = {
+                showingAboutApp = true
+            }
+        }
+        .sheet(isPresented: $showingAboutApp) {
+            AboutAppView()
+        }
     }
 }
 

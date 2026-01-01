@@ -27,7 +27,7 @@ enum AppTheme: String {
 class AppState: ObservableObject {
     private let themeKey = "app_theme"
 
-    @Published var isLoggedIn = false
+    @Published var isLoggedIn = true // Поменять на false чтобы отображать экран регистрации
     @Published var currentUser: User?
     @Published var checkController = CheckController()
 
