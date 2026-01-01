@@ -109,13 +109,32 @@ struct OperationData: Codable, Identifiable {
     }
 }
 
+// MARK: - Work Mode
+enum WorkMode: Int, Codable {
+    case average = 1    // среднее навантаження
+    case heavy = 2      // важкое навантаження
+
+    var airConsumption: Double {
+        switch self {
+        case .average: return 40.0  // л/мин
+        case .heavy: return 80.0    // л/мин
+        }
+    }
+}
+
 // MARK: - Operation Work Data
 struct OperationWorkData: Codable, Identifiable {
     let id: UUID
     let createdDate: Date
     let operationData: OperationData
 
-    // Timers
+    // Work parameters
+    var workMode: WorkMode = .average
+    var minPressure: Int = 300  // минимальный тиск в ланці
+    var initialMinPressure: Int = 300  // начальный минимальный тиск при входе в НДС
+    var protectionTime: Int = 0  // время защитной работы аппарата (статичное)
+
+    // Timers (активные, уменьшаются со временем)
     var exitTimer: TimeInterval = 15 * 60 // 15 minutes
     var remainingTimer: TimeInterval = 35 * 60 // 35 minutes
     var communicationTimer: TimeInterval = 10 * 60 // 10 minutes
@@ -134,6 +153,14 @@ struct OperationWorkData: Codable, Identifiable {
     var lowestPressure: String = ""
     var exitStartPressure: String = ""
     var minimumExitPressure: String = ""
+
+    // Calculated data (статичные расчеты)
+    var pressureOnPath: Int = 0  // тиск використаний на прямування
+    var workTime: Int = 0        // время работы у очага
+    var searchTime: Int = 0      // время поиска очага пожара в минутах
+    var criticalPressure: Int = 0 // критичний тиск (згідно з методичними рекомендаціями)
+    var hoodPressure: Int = 0    // тиск для застосування капюшона
+    var evacuationTimeWithVictim: Int = 0 // час евакуації з постраждалим
 
     // Address
     var workAddress: String = ""
@@ -167,7 +194,8 @@ struct OperationWorkData: Codable, Identifiable {
 
     var expectedExitTime: String {
         guard let entryTime = operationData.settings.entryTime else { return "--:--" }
-        let exitTime = entryTime.addingTimeInterval(30 * 60) // +30 minutes
+        // Добавляем время защитной работы аппарата (protectionTime в минутах)
+        let exitTime = entryTime.addingTimeInterval(TimeInterval(protectionTime * 60))
         let formatter = DateFormatter()
         formatter.dateFormat = "HH:mm"
         return formatter.string(from: exitTime)
@@ -175,5 +203,52 @@ struct OperationWorkData: Codable, Identifiable {
 
     var consumptionRate: String {
         return "20,0 л/хв"
+    }
+
+    var formattedPressureOnPath: String {
+        return "\(pressureOnPath) бар"
+    }
+
+    var formattedWorkTime: String {
+        let minutes = workTime
+        return "\(minutes) хв"
+    }
+
+    var formattedProtectionTime: String {
+        return "\(protectionTime) хв"
+    }
+
+    var formattedExitTime: String {
+        guard let exitTime = dangerZoneExitTime else { return "--:--" }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: exitTime)
+    }
+
+    var calculatedExitStartPressure: String {
+        // Рассчитывает давление, при котором нужно начинать выход (P_вых)
+        // P_вых = P_пр + P_рез, где P_пр = P_вкл - P_поч.роб
+        guard let lowestPressureValue = Int(lowestPressure), !lowestPressure.isEmpty else {
+            return "Введіть тиск у вогню"
+        }
+
+        let pressureAtEntry = Double(minPressure)      // P_вкл - минимальный тиск в ланці
+        let pressureAtWork = Double(lowestPressureValue) // P_поч.роб - давление у огня
+        let reserve = Double(operationData.deviceType.reservePressure) // P_рез - резерв аппарата
+
+        let pressureSpentThere = pressureAtEntry - pressureAtWork  // P_пр
+        let exitPressure = pressureSpentThere + reserve           // P_вых
+
+        return "\(Int(exitPressure)) бар"
+    }
+
+    private func calculateExitPressureAir(pressureAtEntry: Double, pressureAtWork: Double, reserve: Double = 50.0) -> Double {
+        // 1. Считаем, сколько потратили на дорогу ТУДА (P_пр)
+        // P_пр = P_вкл - P_поч.роб
+        let pressureSpentThere = pressureAtEntry - pressureAtWork
+
+        // 2. Считаем давление выхода
+        // P_вых = P_пр + P_рез
+        return pressureSpentThere + reserve
     }
 }
