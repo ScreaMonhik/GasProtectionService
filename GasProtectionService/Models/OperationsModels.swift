@@ -137,7 +137,8 @@ struct OperationWorkData: Codable, Identifiable {
     // Timers (активные, уменьшаются со временем)
     var exitTimer: TimeInterval = 15 * 60 // 15 minutes
     var remainingTimer: TimeInterval = 35 * 60 // 35 minutes
-    var communicationTimer: TimeInterval = 10 * 60 // 10 minutes
+//    var communicationTimer: TimeInterval = 10 * 60 // 10 minutes
+    var communicationTimer: TimeInterval = 15 // 15 seconds (for Debug purposes)
 
     // States
     var hasFoundFireSource: Bool = false

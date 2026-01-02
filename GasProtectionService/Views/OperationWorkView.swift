@@ -10,6 +10,7 @@ import SwiftUI
 struct OperationWorkView: View {
     @StateObject private var controller: OperationWorkController
     @Environment(\.presentationMode) var presentationMode
+    @Environment(\.scenePhase) private var scenePhase
     var onSave: (CheckCommand) -> Void
     
     
@@ -300,13 +301,9 @@ struct OperationWorkView: View {
                 }
                 .sheet(isPresented: $controller.showingAddressAlert) {
                     AddressInputView(
-                        address: $controller.currentAddress,
-                        isLoadingLocation: $controller.isLoadingLocation,
-                        onLocationTap: {
-                            controller.getCurrentLocation()
-                        },
+                        locationService: controller.locationService,
                         onSave: {
-                            controller.workData.workAddress = controller.currentAddress
+                            controller.workData.workAddress = controller.locationService.currentAddress
                             let command = controller.saveToJournal()
                             onSave(command)
                             presentationMode.wrappedValue.dismiss()
@@ -374,6 +371,9 @@ struct OperationWorkView: View {
                 .padding()
                 .presentationDetents([.fraction(0.4)])
             }
+            .onChange(of: scenePhase) { newPhase in
+                controller.handleScenePhaseChange(newPhase)
+            }
         }
     }
 
@@ -407,9 +407,7 @@ struct OperationWorkView: View {
     
     // MARK: - Address Input View
     struct AddressInputView: View {
-        @Binding var address: String
-        @Binding var isLoadingLocation: Bool
-        var onLocationTap: () -> Void
+        @ObservedObject var locationService: LocationService
         var onSave: () -> Void
         var onCancel: () -> Void
         @Environment(\.presentationMode) var presentationMode
@@ -420,15 +418,17 @@ struct OperationWorkView: View {
                     Text("Адреса роботи ланки:")
                         .font(.headline)
                         .padding(.top)
-                    
+
                     HStack(spacing: 12) {
-                        TextField("Введіть адресу роботи", text: $address)
+                        TextField("Введіть адресу роботи", text: $locationService.currentAddress)
                             .textFieldStyle(RoundedBorderTextFieldStyle())
                             .padding(.horizontal)
-                        
-                        Button(action: onLocationTap) {
+
+                        Button(action: {
+                            locationService.requestCurrentLocation()
+                        }) {
                             ZStack {
-                                if isLoadingLocation {
+                                if locationService.isLoadingLocation {
                                     ProgressView()
                                         .progressViewStyle(CircularProgressViewStyle(tint: .blue))
                                 } else {
@@ -439,7 +439,7 @@ struct OperationWorkView: View {
                             }
                             .frame(width: 44, height: 44)
                         }
-                        .disabled(isLoadingLocation)
+                        .disabled(locationService.isLoadingLocation)
                     }
                     .padding(.horizontal)
                     
@@ -454,7 +454,7 @@ struct OperationWorkView: View {
                     trailing: Button("ОК") {
                         onSave()
                     }
-                        .disabled(address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .disabled(locationService.currentAddress.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 )
             }
         }

@@ -7,18 +7,33 @@
 
 import Foundation
 import Combine
-import CoreLocation
+import SwiftUI
 
-class OperationWorkController: NSObject, ObservableObject, CLLocationManagerDelegate {
+class OperationWorkController: NSObject, ObservableObject {
     @Published var workData: OperationWorkData
     @Published var showingAddressAlert = false
     @Published var showingTeamInfo = false
-    @Published var currentAddress = ""
-    @Published var isLoadingLocation = false
+
+    // Location service properties
+    var currentAddress: String {
+        locationService.currentAddress
+    }
+
+    var isLoadingLocation: Bool {
+        locationService.isLoadingLocation
+    }
     @Published var showingPressureAlert = false
     @Published var pressureAlertMessage = ""
     @Published var showingConsumptionWarning = false
     @Published var consumptionWarningMessage = ""
+
+    // Background timing
+    private var backgroundTime: Date?
+    private var scenePhaseObserver: NSObjectProtocol?
+
+    // Services
+    private let notificationService = TimerNotificationService.shared
+    let locationService = LocationService.shared
 
     // Callback для алертов вместо @Published
     var onValidationError: ((String) -> Void)?
@@ -26,8 +41,6 @@ class OperationWorkController: NSObject, ObservableObject, CLLocationManagerDele
 
     private var timer: Timer?
     private var cancellables = Set<AnyCancellable>()
-    private let locationManager = CLLocationManager()
-    private let geocoder = CLGeocoder()
 
     // MARK: - Work Calculation Constants (згідно з методичними рекомендаціями)
     private let reservDrager = 50  // резерв для Drager аппаратов (50-60 бар для сигнального пристрою)
@@ -38,6 +51,9 @@ class OperationWorkController: NSObject, ObservableObject, CLLocationManagerDele
 
         self.workData = workData
         super.init()
+
+        // Настраиваем отслеживание фазы приложения
+        setupScenePhaseObserver()
 
         // Начальное давление будет установлено при начале работы в НДС
         var updatedWorkData = workData
@@ -74,17 +90,18 @@ class OperationWorkController: NSObject, ObservableObject, CLLocationManagerDele
 
         self.workData = workData
         setupTimer()
-        setupLocationManager()
+
+        // Планируем уведомления для начальных таймеров
+        scheduleAllTimerNotifications()
     }
 
-    private func setupLocationManager() {
-        locationManager.delegate = self
-        locationManager.desiredAccuracy = kCLLocationAccuracyBest
-        locationManager.requestWhenInUseAuthorization()
-    }
 
     deinit {
         timer?.invalidate()
+        cancelAllTimerNotifications()
+        if let observer = scenePhaseObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
     }
 
     private func setupTimer() {
@@ -95,6 +112,10 @@ class OperationWorkController: NSObject, ObservableObject, CLLocationManagerDele
 
     private func updateTimers() {
         var updatedWorkData = workData
+        let oldExitTimer = updatedWorkData.exitTimer
+        let oldRemainingTimer = updatedWorkData.remainingTimer
+        let oldCommunicationTimer = updatedWorkData.communicationTimer
+
         if updatedWorkData.exitTimer > 0 {
             updatedWorkData.exitTimer -= 1
         }
@@ -105,6 +126,22 @@ class OperationWorkController: NSObject, ObservableObject, CLLocationManagerDele
             updatedWorkData.communicationTimer -= 1
         }
         workData = updatedWorkData
+
+        // Проигрываем локальный звук если таймеры истекли
+        if (oldExitTimer > 0 && workData.exitTimer == 0) ||
+           (oldRemainingTimer > 0 && workData.remainingTimer == 0) ||
+           (oldCommunicationTimer > 0 && workData.communicationTimer == 0) {
+            notificationService.playAlertSound()
+        }
+
+        // Перепланируем уведомления если таймеры достигли нуля
+        if (oldExitTimer > 0 && workData.exitTimer == 0) ||
+           (oldRemainingTimer > 0 && workData.remainingTimer == 0) ||
+           (oldCommunicationTimer > 0 && workData.communicationTimer == 0) {
+            // Таймеры истекли - отменяем и перепланируем оставшиеся
+            cancelAllTimerNotifications()
+            scheduleAllTimerNotifications()
+        }
     }
 
     func findFireSource() {
@@ -229,6 +266,9 @@ class OperationWorkController: NSObject, ObservableObject, CLLocationManagerDele
                 updatedWorkData.remainingTimer = 0
             }
 
+            // Планируем уведомления для всех таймеров
+            scheduleAllTimerNotifications()
+
             // Устанавливаем время выхода: время начала работы у очага + время работы у очага
             // Когда давление достигнет "тиску початку виходу", нужно начинать выход
             let exitTime = Date()
@@ -245,29 +285,7 @@ class OperationWorkController: NSObject, ObservableObject, CLLocationManagerDele
     }
 
     func getCurrentLocation() {
-        isLoadingLocation = true
-
-        // Check location authorization status
-        let status = locationManager.authorizationStatus
-        switch status {
-        case .notDetermined:
-            locationManager.requestWhenInUseAuthorization()
-            isLoadingLocation = false
-            return
-        case .denied, .restricted:
-            currentAddress = "Доступ до геолокації заборонено"
-            isLoadingLocation = false
-            return
-        case .authorizedWhenInUse, .authorizedAlways:
-            break
-        @unknown default:
-            currentAddress = "Невідома помилка геолокації"
-            isLoadingLocation = false
-            return
-        }
-
-        // Start location updates
-        locationManager.startUpdatingLocation()
+        locationService.requestCurrentLocation()
     }
 
     func saveToJournal() -> CheckCommand {
@@ -531,68 +549,89 @@ class OperationWorkController: NSObject, ObservableObject, CLLocationManagerDele
         return formatter.string(from: newDate)
     }
 
-    // MARK: - CLLocationManagerDelegate
 
-    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        guard let location = locations.last else {
-            isLoadingLocation = false
+    // MARK: - Background Handling
+
+    func setupScenePhaseObserver() {
+        // Этот метод будет вызываться из SwiftUI view с @Environment(\.scenePhase)
+    }
+
+    func handleScenePhaseChange(_ phase: ScenePhase) {
+        switch phase {
+        case .background:
+            backgroundTime = Date()
+        case .active:
+            if let backgroundStart = backgroundTime {
+                let timeInBackground = Date().timeIntervalSince(backgroundStart)
+                adjustTimersAfterBackground(timeInBackground)
+            }
+            backgroundTime = nil
+        case .inactive:
+            break
+        @unknown default:
+            break
+        }
+    }
+
+    private func adjustTimersAfterBackground(_ timeInBackground: TimeInterval) {
+        var updatedWorkData = workData
+
+        // Корректируем таймеры (вычитаем время проведенное в фоне)
+        if updatedWorkData.exitTimer > timeInBackground {
+            updatedWorkData.exitTimer -= timeInBackground
+        } else {
+            updatedWorkData.exitTimer = 0
+        }
+
+        if updatedWorkData.remainingTimer > timeInBackground {
+            updatedWorkData.remainingTimer -= timeInBackground
+        } else {
+            updatedWorkData.remainingTimer = 0
+        }
+
+        if updatedWorkData.communicationTimer > timeInBackground {
+            updatedWorkData.communicationTimer -= timeInBackground
+        } else {
+            updatedWorkData.communicationTimer = 0
+        }
+
+        workData = updatedWorkData
+
+        // Перезапускаем локальный таймер если он был остановлен
+        if timer == nil || !(timer?.isValid ?? false) {
+            setupTimer()
+        }
+
+        // Перепланируем уведомления с новыми временными интервалами
+        cancelAllTimerNotifications()
+        scheduleAllTimerNotifications()
+    }
+
+
+
+    /// Планирует уведомления для всех активных таймеров
+    func scheduleAllTimerNotifications() {
+        let exitTime = TimeInterval(workData.exitTimer)
+        let remainingTime = TimeInterval(workData.remainingTimer)
+        let communicationTime = TimeInterval(workData.communicationTimer)
+
+        // Проверяем, есть ли активные таймеры
+        guard exitTime > 0 || remainingTime > 0 || communicationTime > 0 else {
+            print("No active timers to schedule notifications")
             return
         }
 
-        // Stop updating location after getting first result
-        locationManager.stopUpdatingLocation()
-
-        // Создаём локаль для украинского языка
-        let ukrainianLocale = Locale(identifier: "uk_UA")
-        
-        // Reverse geocoding to get address
-        geocoder.reverseGeocodeLocation(location, preferredLocale: ukrainianLocale) { [weak self] placemarks, error in
-            DispatchQueue.main.async {
-                self?.isLoadingLocation = false
-
-                if let error = error {
-                    self?.currentAddress = "Помилка визначення адреси: \(error.localizedDescription)"
-                    return
-                }
-
-                if let placemark = placemarks?.first {
-                    // Format address in Ukrainian style
-                    var addressComponents = [String]()
-
-                    if let streetName = placemark.thoroughfare, let streetNumber = placemark.subThoroughfare {
-                        addressComponents.append("вул. \(streetName), \(streetNumber)")
-                    } else if let streetName = placemark.thoroughfare {
-                        addressComponents.append("вул. \(streetName)")
-                    }
-
-                    if let city = placemark.locality {
-                        addressComponents.append(city)
-                    }
-
-                    if addressComponents.isEmpty {
-                        self?.currentAddress = "Адреса не знайдена"
-                    } else {
-                        self?.currentAddress = addressComponents.joined(separator: ", ")
-                    }
-                } else {
-                    self?.currentAddress = "Адреса не знайдена"
-                }
-            }
-        }
+        notificationService.scheduleAllTimerNotifications(
+            exitTime: exitTime,
+            remainingTime: remainingTime,
+            communicationTime: communicationTime
+        )
     }
 
-    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        DispatchQueue.main.async {
-            self.isLoadingLocation = false
-            self.currentAddress = "Помилка геолокації: \(error.localizedDescription)"
-        }
-    }
 
-    func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
-        if status == .authorizedWhenInUse || status == .authorizedAlways {
-            // Authorization granted, can now get location
-            isLoadingLocation = false
-        }
+    /// Отменяет все запланированные уведомления таймеров
+    func cancelAllTimerNotifications() {
+        notificationService.cancelAllTimerNotifications()
     }
 }
 

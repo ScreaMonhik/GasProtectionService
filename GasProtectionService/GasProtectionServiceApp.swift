@@ -6,10 +6,13 @@
 //
 
 import SwiftUI
+import UserNotifications
 
 @main
 struct GasProtectionServiceApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var appState = AppState()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
@@ -23,6 +26,11 @@ struct GasProtectionServiceApp: App {
                 }
             }
             .preferredColorScheme(appState.theme.colorScheme)
+            .onChange(of: scenePhase) { phase in
+                if phase == .active {
+                    appDelegate.applicationDidBecomeActive(UIApplication.shared)
+                }
+            }
         }
     }
 }
