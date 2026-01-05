@@ -88,7 +88,7 @@ class TimerNotificationService {
         guard timeInterval > 0 else { return }
         scheduleTimerNotification(
             title: "📡 ГДЗС: Час зв'язку",
-            body: "Необхідно зв'язатися з постом безпеки для звіту",
+            body: "Необхідно зв'язатися з ланкою для звіту",
             timeInterval: timeInterval,
             identifier: "communication_timer_notification"
         )
@@ -200,11 +200,31 @@ class TimerNotificationService {
 
     private func loadCustomAlertSound() {
         // Пытаемся загрузить кастомный звук тревоги для уведомлений
-        if let soundURL = Bundle.main.url(forResource: "emergency_alert", withExtension: "wav", subdirectory: "Sounds") {
-            AudioServicesCreateSystemSoundID(soundURL as CFURL, &customAlertSoundID)
-            customSoundLoaded = true
+        // Сначала пробуем emergency_alert.wav в корне Bundle (для уведомлений), затем в Sounds/
+        var soundURL: URL?
+
+        // Для уведомлений файл должен быть в корне Bundle
+        if let url = Bundle.main.url(forResource: "emergency_alert", withExtension: "wav") {
+            soundURL = url
+            print("✅ Custom emergency alert sound found in bundle root: \(url.lastPathComponent)")
+        } else if let url = Bundle.main.url(forResource: "emergency_alert", withExtension: "wav", subdirectory: "Sounds") {
+            soundURL = url
+            print("⚠️ Custom emergency alert sound found in Sounds/ subdirectory: \(url.lastPathComponent)")
+        }
+
+        if let url = soundURL {
+            let status = AudioServicesCreateSystemSoundID(url as CFURL, &customAlertSoundID)
+            if status == kAudioServicesNoError {
+                customSoundLoaded = true
+                print("✅ Custom emergency alert sound loaded successfully")
+                print("🎵 Background notifications will now use this custom sound!")
+            } else {
+                customSoundLoaded = false
+                print("❌ Failed to load custom sound, status: \(status)")
+            }
         } else {
             customSoundLoaded = false
+            print("⚠️ Custom emergency alert sound not found in bundle")
         }
     }
 
@@ -222,19 +242,28 @@ class TimerNotificationService {
     private func scheduleTimerNotification(title: String, body: String, timeInterval: TimeInterval, identifier: String) {
         let content = UNMutableNotificationContent()
         content.title = title
-        content.subtitle = "🚨 КРИТИЧЕСКАЯ ТРЕВОГА" // Добавляем subtitle для большей серьезности
+        content.subtitle = "🚨 ТРИВОГА" // Добавляем subtitle для большей серьезности
         content.body = body
 
-        // Пытаемся использовать кастомный звук, иначе системный
-        if customSoundLoaded, let soundName = Bundle.main.url(forResource: "emergency_alert", withExtension: "wav", subdirectory: "Sounds")?.lastPathComponent {
-            content.sound = UNNotificationSound(named: UNNotificationSoundName(soundName))
+        // Пытаемся использовать кастомный звук для уведомлений
+        // Для iOS уведомлений файл должен быть в корне Bundle, но мы можем попробовать из Sounds/
+        if customSoundLoaded {
+            // Пробуем найти файл в корне Bundle (правильное место для уведомлений)
+            if let _ = Bundle.main.url(forResource: "emergency_alert", withExtension: "wav") {
+                content.sound = UNNotificationSound(named: UNNotificationSoundName("emergency_alert.wav"))
+                print("🎵 Using custom sound from bundle root for notification")
+            } else {
+                // Если файл не в корне, используем системный звук
+                content.sound = UNNotificationSound.default
+                print("⚠️ Custom sound not in bundle root, using default notification sound")
+            }
         } else {
             content.sound = UNNotificationSound.default
 
             // Делаем уведомление максимально заметным
             content.badge = NSNumber(value: 1)
             content.threadIdentifier = "EMERGENCY_TIMER"
-            content.subtitle = "КРИТИЧЕСКАЯ ТРЕВОГА"
+            content.subtitle = "КРИТИЧНА ТРИВОГА"
         }
         content.categoryIdentifier = "TIMER_NOTIFICATION"
 
@@ -251,7 +280,6 @@ class TimerNotificationService {
 
         // Добавляем badge для видимости
         content.badge = 1
-        print("🔴 Setting timer notification badge to 1")
 
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: timeInterval, repeats: false)
         let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)

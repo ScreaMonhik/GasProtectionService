@@ -66,7 +66,7 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
 
         UNUserNotificationCenter.current().setNotificationCategories([timerCategory])
 
-        // Запрашиваем разрешения (без critical alerts пока нет entitlement)
+        // Запрашиваем разрешения
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
             if let error = error {
                 print("❌ Notification authorization error: \(error.localizedDescription)")
@@ -219,7 +219,7 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         }
 
         let alert = UIAlertController(
-            title: "🚨 КРИТИЧЕСКАЯ ПРОБЛЕМА!",
+            title: "🚨 КРИТИЧНА ПРОБЛЕМА!",
             message: """
             Повідомлення на заблокованому екрані відключені!
 
