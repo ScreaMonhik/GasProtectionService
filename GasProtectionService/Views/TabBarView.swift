@@ -10,7 +10,7 @@ import SwiftUI
 struct TabBarView: View {
     @EnvironmentObject var appState: AppState
     @StateObject private var controller = MainScreenController()
-    private let sideMenuController = SideMenuController()
+    @StateObject private var sideMenuController = SideMenuController()
     @State private var showingAboutApp = false
 
     private var currentTabTitle: String {
@@ -124,17 +124,27 @@ struct TabBarView: View {
                 SideMenuView(isShowing: $controller.showSideMenu, controller: sideMenuController)
                     .frame(width: 280)
                     .transition(.move(edge: .leading))
-                    .zIndex(1)
+                    .zIndex(0)
             }
         }
         .navigationBarHidden(true)
-        .onAppear {
-            sideMenuController.onShowAboutApp = {
-                showingAboutApp = true
-            }
-        }
         .sheet(isPresented: $showingAboutApp) {
             AboutAppView()
+                .onAppear {
+                    print("AboutApp sheet opened")
+                }
+        }
+        .onChange(of: showingAboutApp) { newValue in
+            print("showingAboutApp changed to: \(newValue)")
+        }
+        .onAppear {
+            print("Setting callback for sideMenuController")
+            sideMenuController.onShowAboutApp = {
+                print("Setting showingAboutApp to true")
+                showingAboutApp = true
+                print("showingAboutApp is now: \(showingAboutApp)")
+            }
+            print("Callback set successfully")
         }
     }
 }

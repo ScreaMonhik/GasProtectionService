@@ -27,30 +27,32 @@ class OperationWorkController: NSObject, ObservableObject {
     @Published var showingConsumptionWarning = false
     @Published var consumptionWarningMessage = ""
 
-    // Background timing
-    private var backgroundTime: Date?
     private var scenePhaseObserver: NSObjectProtocol?
 
     // Services
     private let notificationService = TimerNotificationService.shared
     let locationService = LocationService.shared
+    private weak var appState: AppState?
 
     // Callback для алертов вместо @Published
     var onValidationError: ((String) -> Void)?
     var alertAlreadyShown = false  // Internal access for View
 
-    private var timer: Timer?
     private var cancellables = Set<AnyCancellable>()
 
     // MARK: - Work Calculation Constants (згідно з методичними рекомендаціями)
     private let reservDrager = 50  // резерв для Drager аппаратов (50-60 бар для сигнального пристрою)
     private let reservASV = 30     // резерв для ASP-2 аппарата
 
-    init(operationData: OperationData) {
+    init(operationData: OperationData, appState: AppState? = nil) {
         var workData = OperationWorkData(operationData: operationData)
 
         self.workData = workData
+        self.appState = appState
         super.init()
+
+        // Добавляем операцию в активные
+        addToActiveOperations()
 
         // Настраиваем отслеживание фазы приложения
         setupScenePhaseObserver()
@@ -89,60 +91,128 @@ class OperationWorkController: NSObject, ObservableObject {
         workData = updatedWorkData
 
         self.workData = workData
-        setupTimer()
 
         // Планируем уведомления для начальных таймеров
         scheduleAllTimerNotifications()
     }
 
+    // Инициализатор для работы с существующей операцией
+    init(existingOperation: OperationWorkData, appState: AppState) {
+        self.workData = existingOperation
+        self.appState = appState
+        super.init()
+
+        // Настраиваем отслеживание фазы приложения
+        setupScenePhaseObserver()
+    }
+
+
+    func setAppState(_ appState: AppState) {
+        self.appState = appState
+        // Не начинаем наблюдение, чтобы не мешать sheets
+    }
+
+    // Синхронизация данных с менеджером операций
+    private func startDataSynchronization() {
+        // Синхронизируем данные каждые 5 секунд
+        Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
+            self?.updateActiveOperation()
+        }
+    }
+
+    // Загрузка актуальных данных из менеджера (при переключении на операцию)
+    func loadCurrentDataFromManager() {
+        guard let appState = appState,
+              let currentOperation = appState.activeOperationsManager.currentOperation else {
+            return
+        }
+
+        // Сначала сохраняем текущие изменения в менеджер
+        appState.activeOperationsManager.updateActiveOperation(workData)
+
+        let oldWorkData = workData
+        // Всегда загружаем данные текущей операции, независимо от ID
+        workData = currentOperation
+
+        // Проверяем, нужно ли проиграть звуки
+        checkForTimerSounds(oldWorkData: oldWorkData, newWorkData: currentOperation)
+    }
+
+    // Сохранение изменений в менеджер операций
+    func saveChangesToManager() {
+        guard let appState = appState else { return }
+        appState.activeOperationsManager.updateActiveOperation(workData)
+    }
+
+    // Обновление только таймеров (для глобального таймера)
+    func updateTimersFromGlobal() {
+        guard let appState = appState,
+              let currentOperation = appState.activeOperationsManager.currentOperation else {
+            return
+        }
+
+        // Обновляем только таймеры, без изменения всей workData
+        let oldExitTimer = workData.exitTimer
+        let oldRemainingTimer = workData.remainingTimer
+        let oldCommunicationTimer = workData.communicationTimer
+
+        workData.exitTimer = currentOperation.exitTimer
+        workData.remainingTimer = currentOperation.remainingTimer
+        workData.communicationTimer = currentOperation.communicationTimer
+
+        // Проверяем звуки
+        if (oldExitTimer > 0 && currentOperation.exitTimer == 0) ||
+           (oldRemainingTimer > 0 && currentOperation.remainingTimer == 0) ||
+           (oldCommunicationTimer > 0 && currentOperation.communicationTimer == 0) {
+            notificationService.playAlertSound()
+        }
+    }
+
+    private func checkForTimerSounds(oldWorkData: OperationWorkData, newWorkData: OperationWorkData) {
+        // Проигрываем звук если таймеры достигли нуля
+        if (oldWorkData.exitTimer > 0 && newWorkData.exitTimer == 0) ||
+           (oldWorkData.remainingTimer > 0 && newWorkData.remainingTimer == 0) ||
+           (oldWorkData.communicationTimer > 0 && newWorkData.communicationTimer == 0) {
+            notificationService.playAlertSound()
+        }
+
+        // Перепланируем уведомления если таймеры изменились
+        if oldWorkData.exitTimer != newWorkData.exitTimer ||
+           oldWorkData.remainingTimer != newWorkData.remainingTimer ||
+           oldWorkData.communicationTimer != newWorkData.communicationTimer {
+            cancelAllTimerNotifications()
+            scheduleAllTimerNotifications()
+        }
+    }
+
+    // Проверка и удаление завершенной операции
+    func checkAndRemoveCompletedOperation() {
+        guard let appState = appState else { return }
+
+        // Операция считается завершенной, если она вышла из зоны опасности и сохранен адрес
+        if workData.isExitingDangerZone && !workData.workAddress.isEmpty {
+            appState.activeOperationsManager.removeActiveOperation(withId: workData.id)
+        }
+    }
+
+    private func addToActiveOperations() {
+        guard let appState = appState else { return }
+        appState.activeOperationsManager.addActiveOperation(workData)
+    }
+
+    private func updateActiveOperation() {
+        guard let appState = appState else { return }
+        appState.activeOperationsManager.updateActiveOperation(workData)
+    }
+
 
     deinit {
-        timer?.invalidate()
         cancelAllTimerNotifications()
         if let observer = scenePhaseObserver {
             NotificationCenter.default.removeObserver(observer)
         }
     }
 
-    private func setupTimer() {
-        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            self?.updateTimers()
-        }
-    }
-
-    private func updateTimers() {
-        var updatedWorkData = workData
-        let oldExitTimer = updatedWorkData.exitTimer
-        let oldRemainingTimer = updatedWorkData.remainingTimer
-        let oldCommunicationTimer = updatedWorkData.communicationTimer
-
-        if updatedWorkData.exitTimer > 0 {
-            updatedWorkData.exitTimer -= 1
-        }
-        if updatedWorkData.remainingTimer > 0 {
-            updatedWorkData.remainingTimer -= 1
-        }
-        if updatedWorkData.communicationTimer > 0 {
-            updatedWorkData.communicationTimer -= 1
-        }
-        workData = updatedWorkData
-
-        // Проигрываем локальный звук если таймеры истекли
-        if (oldExitTimer > 0 && workData.exitTimer == 0) ||
-           (oldRemainingTimer > 0 && workData.remainingTimer == 0) ||
-           (oldCommunicationTimer > 0 && workData.communicationTimer == 0) {
-            notificationService.playAlertSound()
-        }
-
-        // Перепланируем уведомления если таймеры достигли нуля
-        if (oldExitTimer > 0 && workData.exitTimer == 0) ||
-           (oldRemainingTimer > 0 && workData.remainingTimer == 0) ||
-           (oldCommunicationTimer > 0 && workData.communicationTimer == 0) {
-            // Таймеры истекли - отменяем и перепланируем оставшиеся
-            cancelAllTimerNotifications()
-            scheduleAllTimerNotifications()
-        }
-    }
 
     func findFireSource() {
         var updatedWorkData = workData
@@ -156,6 +226,9 @@ class OperationWorkController: NSObject, ObservableObject {
             updatedWorkData.searchTime = Int(searchTimeInterval / 60) // в минутах
         }
         workData = updatedWorkData
+
+        // Сохраняем изменения
+        saveChangesToManager()
     }
 
     /// Получить минимальное давление среди активных членов ланки
@@ -276,12 +349,18 @@ class OperationWorkController: NSObject, ObservableObject {
             updatedWorkData.dangerZoneExitTime = exitTime.addingTimeInterval(TimeInterval(updatedWorkData.workTime * 60))
         }
         workData = updatedWorkData
+
+        // Сохраняем изменения
+        saveChangesToManager()
     }
 
     func startExitFromDangerZone() {
         var updatedWorkData = workData
         updatedWorkData.isExitingDangerZone = true
         workData = updatedWorkData
+
+        // Сохраняем изменения
+        saveChangesToManager()
     }
 
     func getCurrentLocation() {
@@ -557,55 +636,10 @@ class OperationWorkController: NSObject, ObservableObject {
     }
 
     func handleScenePhaseChange(_ phase: ScenePhase) {
-        switch phase {
-        case .background:
-            backgroundTime = Date()
-        case .active:
-            if let backgroundStart = backgroundTime {
-                let timeInBackground = Date().timeIntervalSince(backgroundStart)
-                adjustTimersAfterBackground(timeInBackground)
-            }
-            backgroundTime = nil
-        case .inactive:
-            break
-        @unknown default:
-            break
-        }
+        // Делегируем обработку фона ActiveOperationsManager
+        appState?.activeOperationsManager.handleScenePhaseChange(phase)
     }
 
-    private func adjustTimersAfterBackground(_ timeInBackground: TimeInterval) {
-        var updatedWorkData = workData
-
-        // Корректируем таймеры (вычитаем время проведенное в фоне)
-        if updatedWorkData.exitTimer > timeInBackground {
-            updatedWorkData.exitTimer -= timeInBackground
-        } else {
-            updatedWorkData.exitTimer = 0
-        }
-
-        if updatedWorkData.remainingTimer > timeInBackground {
-            updatedWorkData.remainingTimer -= timeInBackground
-        } else {
-            updatedWorkData.remainingTimer = 0
-        }
-
-        if updatedWorkData.communicationTimer > timeInBackground {
-            updatedWorkData.communicationTimer -= timeInBackground
-        } else {
-            updatedWorkData.communicationTimer = 0
-        }
-
-        workData = updatedWorkData
-
-        // Перезапускаем локальный таймер если он был остановлен
-        if timer == nil || !(timer?.isValid ?? false) {
-            setupTimer()
-        }
-
-        // Перепланируем уведомления с новыми временными интервалами
-        cancelAllTimerNotifications()
-        scheduleAllTimerNotifications()
-    }
 
 
 

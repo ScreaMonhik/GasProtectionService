@@ -79,6 +79,7 @@ struct OperationSettings: Codable {
 struct OperationData: Codable, Identifiable {
     let id: UUID
     let createdDate: Date
+    var commandName: String? // Название команды/ланки
     var operationType: OperationType
     var deviceType: DeviceType
     var members: [OperationMember]
@@ -86,9 +87,11 @@ struct OperationData: Codable, Identifiable {
 
     init(operationType: OperationType = .fire,
          deviceType: DeviceType = .dragerPSS3000,
-         members: [OperationMember] = []) {
+         members: [OperationMember] = [],
+         commandName: String? = nil) {
         self.id = UUID()
         self.createdDate = Date()
+        self.commandName = commandName
         self.operationType = operationType
         self.deviceType = deviceType
         self.members = members.isEmpty ? [OperationMember(), OperationMember()] : members

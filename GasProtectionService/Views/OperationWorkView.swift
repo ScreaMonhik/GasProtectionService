@@ -6,30 +6,84 @@
 //
 
 import SwiftUI
+import Combine
 
 struct OperationWorkView: View {
-    @StateObject private var controller: OperationWorkController
     @Environment(\.presentationMode) var presentationMode
     @Environment(\.scenePhase) private var scenePhase
+    @EnvironmentObject var appState: AppState
+    @State private var showingSavedCommands = false
+    @State private var showingActiveOperations = false
+    @State private var showingCreateCommand = false
+    @State private var sheetId = UUID() // Для принудительной перерисовки sheets
+    @StateObject private var controller: OperationWorkController
+    @State private var displayExitTimer: TimeInterval = 0
+    @State private var displayRemainingTimer: TimeInterval = 0
+    @State private var displayCommunicationTimer: TimeInterval = 0
     var onSave: (CheckCommand) -> Void
     
     
-    init(operationData: OperationData, onSave: @escaping (CheckCommand) -> Void) {
+    // Инициализатор для работы с менеджером операций
+    init(onSave: @escaping (CheckCommand) -> Void, appState: AppState) {
         self.onSave = onSave
-        _controller = StateObject(wrappedValue: OperationWorkController(operationData: operationData))
+
+        // Создаем контроллер с текущей операцией или пустой операцией
+        let controller: OperationWorkController
+        if let currentOperation = appState.activeOperationsManager.currentOperation {
+            controller = OperationWorkController(existingOperation: currentOperation, appState: appState)
+        } else {
+            // Создаем пустую операцию для инициализации
+            let emptyData = OperationData()
+            let workData = OperationWorkData(operationData: emptyData)
+            controller = OperationWorkController(existingOperation: workData, appState: appState)
+        }
+
+        _controller = StateObject(wrappedValue: controller)
     }
-    
-    
+
+    // Метод для обновления контроллера при смене операции
+    private func updateControllerForCurrentOperation() {
+        // Просто обновляем данные в существующем контроллере
+        controller.loadCurrentDataFromManager()
+        // Обновляем отображение таймеров
+        updateDisplayFromGlobal()
+    }
+
+    private func startDisplayTimer() {
+        Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [self] _ in
+            // Обновляем отображение каждую секунду
+            updateDisplayFromGlobal()
+        }
+    }
+
+    private func stopDisplayTimer() {
+        // Timer автоматически инвалидируется
+    }
+
+    private func updateDisplayFromGlobal() {
+        // Обновляем отображение таймеров из глобального состояния
+        guard let currentOperation = appState.activeOperationsManager.currentOperation else {
+            return
+        }
+
+        // Обновляем только локальные переменные отображения
+        displayExitTimer = currentOperation.exitTimer
+        displayRemainingTimer = currentOperation.remainingTimer
+        displayCommunicationTimer = currentOperation.communicationTimer
+    }
+
+
     var body: some View {
         NavigationView {
-            ZStack {
                 ScrollView {
                     VStack(spacing: 24) {
                         
                     // Top Bar
                     HStack {
                         Button(action: {
-                        // TODO: Add team management functionality
+                            print("Left button pressed - showing saved commands")
+                            sheetId = UUID() // Изменяем ID перед открытием
+                            showingSavedCommands.toggle()
                         }) {
                             Image(systemName: "person.2.badge.plus")
                                 .font(.system(size: 24))
@@ -39,15 +93,29 @@ struct OperationWorkView: View {
                         
                         Spacer()
 
+                        VStack(spacing: 4) {
+                            if let commandName = controller.workData.operationData.commandName {
+                                Text(commandName)
+                                    .font(.headline)
+                                    .foregroundColor(.secondary)
+                            } else {
+                                // Для операций без названия показываем тип операции
+                                Text(controller.workData.operationData.operationType.displayName)
+                                    .font(.headline)
+                                    .foregroundColor(.secondary)
+                            }
                         Text(controller.formatCurrentTime())
                             .font(.title2)
                             .fontWeight(.bold)
                             .foregroundColor(.primary)
+                        }
 
                         Spacer()
 
                         Button(action: {
-                            // TODO: Add communication functionality
+                            print("Right button pressed - showing active operations")
+                            sheetId = UUID() // Изменяем ID перед открытием
+                            showingActiveOperations.toggle()
                         }) {
                             Image(systemName: "link")
                                 .font(.system(size: 24))
@@ -102,7 +170,7 @@ struct OperationWorkView: View {
                                             .font(.body)
                                             .foregroundColor(.primary)
                                         Spacer()
-                                        Text(controller.formatTime(controller.workData.exitTimer))
+                                        Text(controller.formatTime(displayExitTimer))
                                             .font(.body)
                                             .foregroundColor(.red)
                                             .fontWeight(.bold)
@@ -119,7 +187,7 @@ struct OperationWorkView: View {
                                     Text("Залишок")
                                         .font(.body)
                                         .foregroundColor(.primary)
-                                    Text(controller.formatTime(controller.workData.remainingTimer))
+                                    Text(controller.formatTime(displayRemainingTimer))
                                         .font(.title3)
                                         .fontWeight(.bold)
                                         .foregroundColor(.blue)
@@ -133,7 +201,7 @@ struct OperationWorkView: View {
                                     Text("Звʼязок")
                                         .font(.body)
                                         .foregroundColor(.primary)
-                                    Text(controller.formatTime(controller.workData.communicationTimer))
+                                    Text(controller.formatTime(displayCommunicationTimer))
                                         .font(.title3)
                                         .fontWeight(.bold)
                                         .foregroundColor(.green)
@@ -288,7 +356,6 @@ struct OperationWorkView: View {
                         
                     }
                     .hideKeyboardOnTapAndSwipe()
-                }
                 .navigationBarTitle("", displayMode: .inline)
                 .navigationBarItems(trailing: Button(action: {
                     controller.showingTeamInfo = true
@@ -306,6 +373,8 @@ struct OperationWorkView: View {
                             controller.workData.workAddress = controller.locationService.currentAddress
                             let command = controller.saveToJournal()
                             onSave(command)
+                    // Проверяем и удаляем завершенную операцию
+                    controller.checkAndRemoveCompletedOperation()
                             presentationMode.wrappedValue.dismiss()
                         },
                         onCancel: {
@@ -373,6 +442,71 @@ struct OperationWorkView: View {
             }
             .onChange(of: scenePhase) { newPhase in
                 controller.handleScenePhaseChange(newPhase)
+            }
+            .onAppear {
+                // Передаем appState в контроллер
+                controller.setAppState(appState)
+                // Запускаем локальный таймер для обновления отображения
+                startDisplayTimer()
+            }
+            .onDisappear {
+                // Останавливаем локальный таймер
+                stopDisplayTimer()
+            }
+            .onChange(of: appState.activeOperationsManager.currentOperationId) { newId in
+                print("🔄 onChange: currentOperationId changed to \(newId?.uuidString ?? "nil")")
+                // Обновляем контроллер при смене текущей операции
+                updateControllerForCurrentOperation()
+            }
+            .fullScreenCover(isPresented: $showingSavedCommands) {
+                SavedCommandsView(
+                    onCommandSelected: { selectedCommand in
+                        // Создаем новую параллельную операцию с выбранной командой
+                        print("Selected command: \(selectedCommand.commandName)")
+                        let operationData = CommandCreationController.convertCheckCommandToOperationData(selectedCommand)
+                        print("Created operation data with commandName: \(operationData.commandName ?? "nil")")
+                        let workData = OperationWorkData(operationData: operationData)
+                        appState.activeOperationsManager.addActiveOperation(workData)
+                        // Автоматически переключаемся на новую операцию
+                        appState.activeOperationsManager.switchToOperation(withId: workData.id)
+                        print("Added new operation to manager and switched to it. Total operations: \(appState.activeOperationsManager.activeOperations.count)")
+                        // Небольшая задержка перед закрытием для обновления view
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            showingSavedCommands = false
+                        }
+                    },
+                    onCreateNewCommand: {
+                        showingSavedCommands = false
+                        showingCreateCommand = true
+                    }
+                )
+                .environmentObject(appState)
+                .id(sheetId)
+            }
+            .fullScreenCover(isPresented: $showingActiveOperations) {
+                ActiveOperationsView(onOperationSelected: { selectedOperation in
+                    print("🎯 Selected operation from ActiveOperationsView: \(selectedOperation.operationData.commandName ?? selectedOperation.operationData.operationType.displayName)")
+                    // Переключаемся на выбранную активную операцию
+                    appState.activeOperationsManager.switchToOperation(withId: selectedOperation.id)
+                    // Обновляем контроллер сразу после переключения
+                    updateControllerForCurrentOperation()
+                    showingActiveOperations = false
+                })
+                .environmentObject(appState)
+                .id(sheetId)
+            }
+            .fullScreenCover(isPresented: $showingCreateCommand) {
+                CreateCommandView { newCommand in
+                    showingCreateCommand = false
+                    // После создания команды, автоматически создаем новую операцию
+                    let operationData = CommandCreationController.convertCheckCommandToOperationData(newCommand)
+                    let workData = OperationWorkData(operationData: operationData)
+                    appState.activeOperationsManager.addActiveOperation(workData)
+                    // Автоматически переключаемся на новую операцию
+                    appState.activeOperationsManager.switchToOperation(withId: workData.id)
+                }
+                .environmentObject(appState)
+                .id(sheetId)
             }
         }
     }
@@ -502,10 +636,14 @@ struct OperationWorkView: View {
 
     
     #Preview {
+        let appState = AppState()
         let operationData = OperationData()
-        return OperationWorkView(operationData: operationData) { command in
+        let workData = OperationWorkData(operationData: operationData)
+        appState.activeOperationsManager.addActiveOperation(workData)
+
+        return OperationWorkView(onSave: { command in
             print("Saved command: \(command.commandName)")
-        }
+        }, appState: appState)
         .environment(\.locale, Locale(identifier: "uk"))
     }
 

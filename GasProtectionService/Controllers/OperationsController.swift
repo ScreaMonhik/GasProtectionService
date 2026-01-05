@@ -82,7 +82,8 @@ class OperationCreationController: ObservableObject {
             newCommand = OperationData(
                 operationType: .fire, // По умолчанию
                 deviceType: command.deviceType,
-                members: loadedMembers
+                members: loadedMembers,
+                commandName: command.commandName // Устанавливаем название команды
             )
         }
     }

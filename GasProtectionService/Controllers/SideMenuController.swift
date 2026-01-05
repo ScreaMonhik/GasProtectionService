@@ -6,8 +6,9 @@
 //
 
 import Foundation
+import Combine
 
-class SideMenuController {
+class SideMenuController: ObservableObject {
     // MARK: - Menu Items Model
 
     struct MenuItem {

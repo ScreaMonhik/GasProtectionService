@@ -30,6 +30,36 @@ class CheckController: ObservableObject {
 
     init() {
         loadCommands()
+
+        // Очищаем старые "псевдо-команды" которые на самом деле являются типами операций
+        let operationTypes = ["Пожежа", "Аварія", "Заняття", "Навчання"]
+        commands = commands.filter { command in
+            !operationTypes.contains(command.commandName)
+        }
+        saveCommands() // Сохраняем очищенные команды
+
+        // Добавляем тестовые команды для демонстрации
+        if commands.isEmpty {
+            let testCommand1 = CheckCommand(
+                commandName: "Ланка №1 - пожежна",
+                teamMembers: [
+                    TeamMember(fullName: "Іванов Іван", pressure: "300", hasRescueDevice: true),
+                    TeamMember(fullName: "Петров Петро", pressure: "300", hasRescueDevice: false)
+                ]
+            )
+            let testCommand2 = CheckCommand(
+                commandName: "Ланка №2 - рятувальна",
+                teamMembers: [
+                    TeamMember(fullName: "Сидоров Сидір", pressure: "300", hasRescueDevice: true),
+                    TeamMember(fullName: "Коваленко Коля", pressure: "300", hasRescueDevice: false)
+                ]
+            )
+            addCommand(testCommand1)
+            addCommand(testCommand2)
+            print("DEBUG: Created default commands: \(commands.map { $0.commandName })")
+        } else {
+            print("DEBUG: Loaded existing commands: \(commands.map { $0.commandName })")
+        }
     }
 
     func addCommand(_ command: CheckCommand) {
@@ -69,6 +99,34 @@ class CheckController: ObservableObject {
 
 // MARK: - Command Creation Controller
 class CommandCreationController: ObservableObject {
+
+    // MARK: - Class Methods
+
+    /// Конвертирует CheckCommand в OperationData для создания операции
+    static func convertCheckCommandToOperationData(_ command: CheckCommand) -> OperationData {
+        // Конвертируем TeamMember в OperationMember
+        let operationMembers = command.teamMembers.map { teamMember in
+            OperationMember(
+                role: .firefighter, // По умолчанию, можно улучшить логику определения ролей
+                fullName: teamMember.fullName,
+                pressure: teamMember.pressure,
+                isActive: true
+            )
+        }
+
+        // Создаем OperationData
+        var operationData = OperationData(
+            operationType: .fire, // По умолчанию, можно добавить выбор типа
+            deviceType: command.deviceType,
+            members: operationMembers,
+            commandName: command.commandName
+        )
+
+        // Устанавливаем время входа как текущее время
+        operationData.settings.entryTime = Date()
+
+        return operationData
+    }
     @Published var command: CheckCommand
     @Published var showingDevicePicker = false
     @Published var showingRescueAlert = false

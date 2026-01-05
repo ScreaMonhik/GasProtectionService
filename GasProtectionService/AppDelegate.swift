@@ -256,6 +256,21 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         UIApplication.shared.applicationIconBadgeNumber = 0
     }
 
+    func applicationWillTerminate(_ application: UIApplication) {
+        // При полном закрытии приложения очищаем все активные операции
+        print("🛑 Application will terminate - clearing all active operations")
+
+        // Очищаем все запланированные уведомления таймеров
+        UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+        UNUserNotificationCenter.current().removeAllDeliveredNotifications()
+
+        // Очищаем активные операции из UserDefaults
+        UserDefaults.standard.removeObject(forKey: "active_operations")
+        UserDefaults.standard.removeObject(forKey: "current_operation_id")
+
+        print("✅ All active operations and notifications cleared on app termination")
+    }
+
     // MARK: - Background Handling
 
 }

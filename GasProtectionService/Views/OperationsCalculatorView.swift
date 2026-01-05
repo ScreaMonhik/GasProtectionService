@@ -6,22 +6,39 @@
 //
 
 import SwiftUI
+import Combine
 
 struct OperationsCalculatorView: View {
-    @StateObject private var controller: OperationCreationController
     @Environment(\.presentationMode) var presentationMode
+    @EnvironmentObject var appState: AppState
+    @ObservedObject private var controller: OperationCreationController
     @State private var isWorking = false
+    @State private var selectedOperationType: OperationType = .fire
+    @State private var selectedDeviceType: DeviceType = .dragerPSS3000
+    @State private var showingOperationTypePicker = false
+    @State private var showingDevicePicker = false
+    @State private var showingRolePicker = false
+    @State private var rolePickerMemberIndex: Int?
     var onSave: (CheckCommand) -> Void
+
+    // Вычисляемое свойство для проверки валидности
+    var isOperationValid: Bool {
+        let activeCount = controller.newCommand.members.filter { $0.isActive }.count
+        return activeCount >= 2
+    }
 
     init(availableCommand: CheckCommand? = nil, onSave: @escaping (CheckCommand) -> Void) {
         self.onSave = onSave
-        _controller = StateObject(wrappedValue: OperationCreationController(availableCommand: availableCommand))
+        let controller = OperationCreationController(availableCommand: availableCommand)
+        self._controller = ObservedObject(initialValue: controller)
+        // Инициализируем локальные переменные значениями из контроллера
+        self._selectedOperationType = State(initialValue: controller.newCommand.operationType)
+        self._selectedDeviceType = State(initialValue: controller.newCommand.deviceType)
     }
 
     var body: some View {
         NavigationView {
-            ScrollViewReader { scrollView in
-                ScrollView {
+            ScrollView {
                     VStack(spacing: 24) {
                         // Header
                         VStack(spacing: 8) {
@@ -43,10 +60,15 @@ struct OperationsCalculatorView: View {
                                 .foregroundColor(.primary)
 
                             Button(action: {
-                                controller.showingOperationTypePicker.toggle()
+                                print("=== BUTTON PRESSED ===")
+                                print("Operation type picker button pressed, current state: \(showingOperationTypePicker)")
+                                // Убираем sheetId для теста
+                                showingOperationTypePicker.toggle()
+                                print("Operation type picker state after toggle: \(showingOperationTypePicker)")
+                                print("=== BUTTON END ===")
                             }) {
                                 HStack {
-                                    Text(controller.newCommand.operationType.displayName)
+                                    Text(selectedOperationType.displayName)
                                         .foregroundColor(.primary)
                                     Spacer()
                                     Image(systemName: "chevron.down")
@@ -67,10 +89,11 @@ struct OperationsCalculatorView: View {
                                     .foregroundColor(.primary)
 
                                 Button(action: {
-                                    controller.showingDevicePicker.toggle()
+                                    print("Device picker button pressed")
+                                    showingDevicePicker.toggle()
                                 }) {
                                     HStack {
-                                        Text(controller.newCommand.deviceType.displayName)
+                                        Text(selectedDeviceType.displayName)
                                             .foregroundColor(.primary)
                                         Spacer()
                                         Image(systemName: "chevron.down")
@@ -90,33 +113,56 @@ struct OperationsCalculatorView: View {
                                 .font(.headline)
                                 .foregroundColor(.primary)
 
-                            ForEach(controller.newCommand.members.indices, id: \.self) { index in
+                            ForEach(controller.newCommand.members, id: \.id) { member in
+                                let memberIndex = controller.newCommand.members.firstIndex(where: { $0.id == member.id }) ?? 0
+
+                                let memberBinding = Binding(
+                                    get: { member },
+                                    set: {
+                                        if let index = self.controller.newCommand.members.firstIndex(where: { $0.id == member.id }) {
+                                            self.controller.newCommand.members[index] = $0
+                                        }
+                                    }
+                                )
+
+                                let activeBinding = Binding(
+                                    get: { member.isActive },
+                                    set: {
+                                        if let index = self.controller.newCommand.members.firstIndex(where: { $0.id == member.id }) {
+                                            self.controller.newCommand.members[index].isActive = $0
+                                        }
+                                    }
+                                )
+
                                 OperationMemberRow(
-                                    member: $controller.newCommand.members[index],
+                                    member: memberBinding,
+                                    isActive: activeBinding,
                                     onRoleTap: {
-                                        controller.showRolePicker(for: index)
-                                    },
-                                    onActiveToggle: {
-                                        controller.toggleMemberActive(index)
+                                        if let index = self.controller.newCommand.members.firstIndex(where: { $0.id == member.id }) {
+                                            self.rolePickerMemberIndex = index
+                                            self.showingRolePicker = true
+                                        }
                                     },
                                     onDelete: {
-                                        controller.removeMemberAt(index)
+                                        if let index = self.controller.newCommand.members.firstIndex(where: { $0.id == member.id }) {
+                                            self.controller.removeMemberAt(index)
+                                        }
                                     },
-                                    canDelete: controller.canRemoveMemberAt(index)
+                                    canDelete: {
+                                        if let index = self.controller.newCommand.members.firstIndex(where: { $0.id == member.id }) {
+                                            return self.controller.canRemoveMemberAt(index)
+                                        }
+                                        return false
+                                    }()
                                 )
-                                .id(index)
                             }
                         }
                         .padding(.horizontal)
 
                         // Add Button
                         Button(action: {
+                            print("Add member button pressed")
                             controller.addMember()
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                withAnimation {
-                                    scrollView.scrollTo(controller.newCommand.members.count - 1, anchor: .bottom)
-                                }
-                            }
                         }) {
                             Text("Додати")
                                 .font(.headline)
@@ -167,11 +213,26 @@ struct OperationsCalculatorView: View {
 
                         // Start Work Button
                     Button(action: {
-                        if controller.isValidOperation() {
+                        if isOperationValid {
+                            // Синхронизируем локальные состояния с контроллером
+                            controller.newCommand.operationType = selectedOperationType
+                            controller.newCommand.deviceType = selectedDeviceType
+
                             // Устанавливаем текущее время, если время входа не выбрано
                             if controller.newCommand.settings.entryTime == nil {
                                 controller.newCommand.settings.entryTime = Date()
                             }
+                            print("=== STARTING OPERATION ===")
+                            print("Command name: \(controller.newCommand.commandName ?? "nil")")
+                            print("Operation type: \(controller.newCommand.operationType.displayName)")
+                            print("Active operations before: \(appState.activeOperationsManager.activeOperations.count)")
+                            // Оставляем commandName как есть - он установлен в OperationCreationController
+                            let operationData = controller.newCommand
+                            let workData = OperationWorkData(operationData: operationData)
+                            appState.activeOperationsManager.addActiveOperation(workData)
+                            print("Active operations after: \(appState.activeOperationsManager.activeOperations.count)")
+                            print("Current operation ID: \(appState.activeOperationsManager.currentOperationId?.uuidString ?? "nil")")
+                            print("=== OPERATION STARTED ===")
                             isWorking = true
                         }
                     }) {
@@ -180,7 +241,7 @@ struct OperationsCalculatorView: View {
                                 .foregroundColor(.white)
                                 .frame(maxWidth: .infinity)
                                 .padding()
-                                .background(controller.isValidOperation() ? Color.green : Color.gray)
+                                .background(isOperationValid ? Color.green : Color.gray)
                                 .cornerRadius(12)
                         }
                         .padding(.horizontal)
@@ -197,29 +258,43 @@ struct OperationsCalculatorView: View {
                 })
                 .navigationBarTitle("", displayMode: .inline)
             }
-            .sheet(isPresented: $controller.showingOperationTypePicker) {
-                OperationTypePickerView(selectedType: $controller.newCommand.operationType)
+            .sheet(isPresented: $showingOperationTypePicker) {
+                OperationTypePickerView(selectedType: $selectedOperationType)
+                    .onAppear {
+                        print("Operation type picker sheet opened")
+                    }
             }
-            .sheet(isPresented: $controller.showingDevicePicker) {
-                DevicePickerView(selectedDevice: $controller.newCommand.deviceType)
+            .sheet(isPresented: $showingDevicePicker) {
+                DevicePickerView(selectedDevice: $selectedDeviceType)
             }
-            .sheet(isPresented: $controller.showingRolePicker) {
+            .sheet(isPresented: $showingRolePicker) {
                 TeamRolePickerView(onRoleSelected: { role in
-                    controller.selectRole(role)
+                    if let index = rolePickerMemberIndex {
+                        controller.newCommand.members[index].role = role
+                    }
+                    showingRolePicker = false
                 })
             }
             .fullScreenCover(isPresented: $isWorking) {
-                OperationWorkView(operationData: controller.newCommand, onSave: onSave)
+                OperationWorkView(onSave: onSave, appState: appState)
+            }
+            .sheet(isPresented: $appState.checkController.isCreatingCommand) {
+                CreateCommandView { newCommand in
+                    // После создания команды, автоматически выбираем её
+                    let newController = OperationCreationController(availableCommand: newCommand)
+                    self.controller.newCommand = newController.newCommand
+                    self.controller.isEditingExisting = newController.isEditingExisting
+                    self.controller.objectWillChange.send()
+                }
             }
         }
     }
-}
 
-// MARK: - Operation Member Row
+    // MARK: - Operation Member Row
 struct OperationMemberRow: View {
     @Binding var member: OperationMember
+    @Binding var isActive: Bool
     var onRoleTap: () -> Void
-    var onActiveToggle: () -> Void
     var onDelete: () -> Void
     var canDelete: Bool
 
@@ -239,10 +314,10 @@ struct OperationMemberRow: View {
             .frame(width: 40, height: 40)
 
             // Active Toggle
-            Button(action: onActiveToggle) {
-                Image(systemName: member.isActive ? "checkmark.circle.fill" : "checkmark.circle")
+            Button(action: { isActive.toggle() }) {
+                Image(systemName: isActive ? "checkmark.circle.fill" : "checkmark.circle")
                     .font(.system(size: 24))
-                    .foregroundColor(member.isActive ? .green : .gray)
+                    .foregroundColor(isActive ? .green : .gray)
                     .frame(width: 40, height: 40)
             }
 
@@ -273,7 +348,7 @@ struct OperationMemberRow: View {
         .padding()
         .background(Color(.systemGray5).opacity(0.3))
         .cornerRadius(12)
-        .opacity(member.isActive ? 1.0 : 0.5)
+        .opacity(isActive ? 1.0 : 0.5)
     }
 }
 
