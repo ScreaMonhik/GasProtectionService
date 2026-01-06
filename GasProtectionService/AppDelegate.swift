@@ -132,18 +132,8 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
 
         // Проигрываем звук при нажатии на уведомление таймера
         if response.notification.request.content.categoryIdentifier == "TIMER_NOTIFICATION" {
-            // Серия сигналов подтверждения - серьезный звук
-            AudioServicesPlaySystemSound(SystemSoundID(kSystemSoundID_Vibrate))
-            AudioServicesPlaySystemSound(1304)
-            AudioServicesPlaySystemSound(1108) // Серьезный звук подтверждения
-
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                AudioServicesPlaySystemSound(SystemSoundID(kSystemSoundID_Vibrate))
-                AudioServicesPlaySystemSound(1110) // Максимально серьезный звук
-            }
-
-            // Убираем badge когда пользователь тапает на уведомление
-            UIApplication.shared.applicationIconBadgeNumber = 0
+            // Звук убран по просьбе пользователя
+            // Приложение просто открывается
         }
 
         // Обработка нажатия на уведомление

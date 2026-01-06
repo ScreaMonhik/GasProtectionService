@@ -15,6 +15,16 @@ struct OperationDetailsView: View {
         OperationWorkController.loadWorkDataForCommand(command.id)
     }
 
+    private var protectionTime: Int {
+        if let workData = workData {
+            return workData.protectionTime
+        }
+        // Fallback calculation if WorkData is missing
+        let pressures = command.teamMembers.compactMap { Int($0.pressure) }
+        let minPressure = pressures.min() ?? 0
+        return GasCalculator.calculateProtectionTime(minPressure: minPressure, deviceType: command.deviceType)
+    }
+
     var body: some View {
         NavigationView {
             ScrollView {
@@ -26,7 +36,8 @@ struct OperationDetailsView: View {
                                 .font(.body)
                                 .foregroundColor(.primary)
                             Spacer()
-                            Text("\(command.deviceType.protectionTimeMinutes) хв.")
+                            Spacer()
+                            Text("\(protectionTime) хв.")
                                 .font(.body)
                                 .foregroundColor(.secondary)
                         }

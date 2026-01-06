@@ -13,15 +13,14 @@ import SwiftUI
 class ActiveOperationsManager: ObservableObject {
     private let activeOperationsKey = "active_operations"
 
-    private var _activeOperations: [OperationWorkData] = [] {
+    @Published var activeOperations: [OperationWorkData] = [] {
         didSet {
             saveActiveOperations()
         }
     }
-
-    var activeOperations: [OperationWorkData] {
-        _activeOperations
-    }
+    
+    // Legacy private var removed, using public Published property
+    // private var _activeOperations: [OperationWorkData] = []
 
     // Глобальный таймер для обновления всех активных операций
     private var globalTimer: Timer?
@@ -32,9 +31,9 @@ class ActiveOperationsManager: ObservableObject {
         loadActiveOperations()
 
         // Очищаем активные операции при запуске приложения (они не должны сохраняться между запусками)
-        if !_activeOperations.isEmpty {
-            print("🧹 Clearing \(_activeOperations.count) active operations on app launch")
-            _activeOperations.removeAll()
+        if !activeOperations.isEmpty {
+            print("🧹 Clearing \(activeOperations.count) active operations on app launch")
+            activeOperations.removeAll()
             currentOperationId = nil
             saveActiveOperations()
         }
@@ -51,7 +50,7 @@ class ActiveOperationsManager: ObservableObject {
     }
 
     private func updateAllActiveOperations() {
-        for (index, operation) in _activeOperations.enumerated() {
+        for (index, operation) in activeOperations.enumerated() {
             var updatedOperation = operation
 
             // Обновляем таймеры
@@ -65,7 +64,7 @@ class ActiveOperationsManager: ObservableObject {
                 updatedOperation.communicationTimer -= 1
             }
 
-            _activeOperations[index] = updatedOperation
+            activeOperations[index] = updatedOperation
         }
     }
 
@@ -87,7 +86,7 @@ class ActiveOperationsManager: ObservableObject {
     }
 
     private func adjustTimersAfterBackground(_ timeInBackground: TimeInterval) {
-        for (index, operation) in _activeOperations.enumerated() {
+        for (index, operation) in activeOperations.enumerated() {
             var updatedOperation = operation
 
             // Корректируем таймеры (вычитаем время проведенное в фоне)
@@ -109,44 +108,44 @@ class ActiveOperationsManager: ObservableObject {
                 updatedOperation.communicationTimer = 0
             }
 
-            _activeOperations[index] = updatedOperation
+            activeOperations[index] = updatedOperation
         }
     }
 
     @Published var currentOperationId: UUID?
 
     var currentOperation: OperationWorkData? {
-        _activeOperations.first { $0.id == currentOperationId }
+        activeOperations.first { $0.id == currentOperationId }
     }
 
     func addActiveOperation(_ operation: OperationWorkData) {
-        _activeOperations.append(operation)
+        activeOperations.append(operation)
         print("Added active operation: \(operation.operationData.commandName ?? "Unknown") at \(Date())")
         print("Operation details: protectionTime=\(operation.protectionTime), minPressure=\(operation.minPressure), remainingTimer=\(operation.remainingTimer) seconds")
-        print("Total active operations: \(_activeOperations.count)")
+        print("Total active operations: \(activeOperations.count)")
         // Если это первая операция, сделать её текущей
-        if _activeOperations.count == 1 {
+        if activeOperations.count == 1 {
             currentOperationId = operation.id
         }
     }
 
     func removeActiveOperation(withId id: UUID) {
-        _activeOperations.removeAll { $0.id == id }
+        activeOperations.removeAll { $0.id == id }
         // Если удалили текущую операцию, выбрать другую
         if currentOperationId == id {
-            currentOperationId = _activeOperations.first?.id
+            currentOperationId = activeOperations.first?.id
         }
     }
 
     func switchToOperation(withId id: UUID) {
-        if _activeOperations.contains(where: { $0.id == id }) {
+        if activeOperations.contains(where: { $0.id == id }) {
             currentOperationId = id
         }
     }
 
     func updateActiveOperation(_ operation: OperationWorkData) {
-        if let index = _activeOperations.firstIndex(where: { $0.id == operation.id }) {
-            _activeOperations[index] = operation
+        if let index = activeOperations.firstIndex(where: { $0.id == operation.id }) {
+            activeOperations[index] = operation
         }
     }
 
@@ -162,7 +161,7 @@ class ActiveOperationsManager: ObservableObject {
     private func loadActiveOperations() {
         guard let data = UserDefaults.standard.data(forKey: activeOperationsKey) else { return }
         do {
-            _activeOperations = try JSONDecoder().decode([OperationWorkData].self, from: data)
+            activeOperations = try JSONDecoder().decode([OperationWorkData].self, from: data)
         } catch {
             print("Error loading active operations: \(error)")
         }

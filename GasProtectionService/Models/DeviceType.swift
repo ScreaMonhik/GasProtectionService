@@ -17,36 +17,25 @@ enum DeviceType: String, Codable, CaseIterable {
         return self.rawValue
     }
 
-    var protectionTimeMinutes: Int {
-        switch self {
-        case .dragerPSS3000:
-            return 35
-        case .dragerPSS4000:
-            return 40
-        case .asp2:
-            return 37
-        case .msa:
-            return 39
-        }
-    }
+
 
     var cylinderVolume: Double {
         switch self {
-        case .dragerPSS3000, .dragerPSS4000:
-            return 6.8  // литры
+        case .dragerPSS3000, .msa:
+            return 6.0  // літри
+        case .dragerPSS4000:
+            return 7.0  // літри
         case .asp2:
-            return 7.0  // литры
-        case .msa:
-            return 6.0  // литры
+            return 4.5  // літри
         }
     }
 
     var cylinderCount: Int {
         switch self {
-        case .dragerPSS3000, .dragerPSS4000:
+        case .dragerPSS3000, .dragerPSS4000, .msa:
             return 1  // Drager аппараты имеют 1 баллон
-        case .asp2, .msa:
-            return 1  // остальные имеют 1 баллон
+        case .asp2:
+            return 2  // АСП-2 аппараты имеют 2 баллона
         }
     }
 

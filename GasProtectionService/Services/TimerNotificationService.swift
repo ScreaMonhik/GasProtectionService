@@ -262,7 +262,6 @@ class TimerNotificationService {
 
             // Делаем уведомление максимально заметным
             content.badge = NSNumber(value: 1)
-            content.threadIdentifier = "EMERGENCY_TIMER"
             content.subtitle = "КРИТИЧНА ТРИВОГА"
         }
         content.categoryIdentifier = "TIMER_NOTIFICATION"
@@ -274,9 +273,15 @@ class TimerNotificationService {
             "repeatSound": true
         ]
 
-        // Устанавливаем максимальный уровень прерывания для обычных уведомлений
-        content.threadIdentifier = "TIMER_EMERGENCY"
-        content.interruptionLevel = .active
+        // Устанавливаем максимальный уровень прерывания
+        // content.threadIdentifier удален, чтобы избежать группировки, которая может скрывать уведомления
+        
+        // Используем .timeSensitive для прорыва через Focus режимы и гарантии отображения
+        if #available(iOS 15.0, *) {
+            content.interruptionLevel = .timeSensitive
+        } else {
+            // Fallback on earlier versions
+        }
 
         // Добавляем badge для видимости
         content.badge = 1
