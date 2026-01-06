@@ -11,14 +11,11 @@ extension View {
     /// Добавляет возможность скрытия клавиатуры при тапе на пустую область или свайпе вниз
     func hideKeyboardOnTapAndSwipe() -> some View {
         self
-            .gesture(
-                DragGesture()
+            .simultaneousGesture(
+                TapGesture()
                     .onEnded { _ in
                         UIApplication.shared.endEditing()
                     }
             )
-            .onTapGesture {
-                UIApplication.shared.endEditing()
-            }
     }
 }

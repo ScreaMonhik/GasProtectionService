@@ -82,7 +82,7 @@ struct OperationWorkView: View {
 
     var body: some View {
         NavigationView {
-                ScrollView {
+                ScrollView(.vertical, showsIndicators: true) {
                     VStack(spacing: 24) {
                         
                     // Top Bar
@@ -203,6 +203,7 @@ struct OperationWorkView: View {
                                 .padding()
                                 .background(Color(.systemGray6))
                                 .cornerRadius(12)
+                                .contentShape(Rectangle())
                                 
                                 VStack(alignment: .leading) {
                                     Text("Звʼязок")
@@ -217,9 +218,14 @@ struct OperationWorkView: View {
                                 .padding()
                                 .background(Color(.systemGray6))
                                 .cornerRadius(12)
+                                .contentShape(Rectangle())
                             }
                         }
                         .padding(.horizontal)
+                        .onTapGesture {
+                            // Dismiss keyboard when tapping on timer areas
+                            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                        }
                         
                         // Danger Zone Start Block
                         if controller.workData.hasFoundFireSource {
@@ -362,7 +368,8 @@ struct OperationWorkView: View {
                         .padding(.bottom, 32)
                         
                     }
-                    .hideKeyboardOnTapAndSwipe()
+                }
+                .scrollDismissesKeyboard(.interactively)
                 .navigationBarTitle("", displayMode: .inline)
                 .navigationBarItems(trailing: Button(action: {
                     controller.showingTeamInfo = true
@@ -516,7 +523,6 @@ struct OperationWorkView: View {
                 .id(sheetId)
             }
         }
-    }
 
     var buttonTitle: String {
             if !controller.workData.hasFoundFireSource {
@@ -544,7 +550,7 @@ struct OperationWorkView: View {
         var buttonColor: Color {
             return buttonDisabled ? Color.gray : Color.blue
         }
-    }
+    
     
     // MARK: - Address Input View
     struct AddressInputView: View {
@@ -640,6 +646,7 @@ struct OperationWorkView: View {
             }
         }
     }
+}
 
     
     #Preview {
