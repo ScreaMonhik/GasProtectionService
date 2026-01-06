@@ -36,6 +36,7 @@ struct OperationsCalculatorView: View {
         self._selectedDeviceType = State(initialValue: controller.newCommand.deviceType)
     }
 
+
     var body: some View {
         NavigationView {
             ScrollView {
@@ -224,11 +225,14 @@ struct OperationsCalculatorView: View {
                             }
                             print("=== STARTING OPERATION ===")
                             print("Command name: \(controller.newCommand.commandName ?? "nil")")
+                            print("Device type: \(controller.newCommand.deviceType.displayName)")
+                            print("Device params: cylinders=\(controller.newCommand.deviceType.cylinderCount), volume=\(controller.newCommand.deviceType.cylinderVolume), airConsumption=\(controller.newCommand.deviceType.airConsumption)")
+                            print("Members pressures: \(controller.newCommand.members.map { "\($0.fullName): \($0.pressure)" })")
                             print("Operation type: \(controller.newCommand.operationType.displayName)")
                             print("Active operations before: \(appState.activeOperationsManager.activeOperations.count)")
                             // Оставляем commandName как есть - он установлен в OperationCreationController
                             let operationData = controller.newCommand
-                            let workData = OperationWorkData(operationData: operationData)
+                            let workData = OperationWorkController.createInitialWorkData(from: operationData)
                             appState.activeOperationsManager.addActiveOperation(workData)
                             print("Active operations after: \(appState.activeOperationsManager.activeOperations.count)")
                             print("Current operation ID: \(appState.activeOperationsManager.currentOperationId?.uuidString ?? "nil")")

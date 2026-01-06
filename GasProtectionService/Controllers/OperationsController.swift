@@ -88,6 +88,7 @@ class OperationCreationController: ObservableObject {
         }
     }
 
+
     // MARK: - Public Methods
 
     func addMember() {

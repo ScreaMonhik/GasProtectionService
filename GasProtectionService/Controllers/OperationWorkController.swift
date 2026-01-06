@@ -45,11 +45,51 @@ class OperationWorkController: NSObject, ObservableObject {
     private let reservASV = 30     // резерв для ASP-2 аппарата
 
     init(operationData: OperationData, appState: AppState? = nil) {
-        var workData = OperationWorkData(operationData: operationData)
-
-        self.workData = workData
+        // Временная инициализация workData
+        var tempWorkData = OperationWorkData(operationData: operationData)
+        self.workData = tempWorkData
         self.appState = appState
         super.init()
+
+        // Рассчитываем начальные параметры
+        let minPressure = OperationWorkController.getMinPressureInTeam(from: operationData)
+        let protectionTime = OperationWorkController.calculateProtectionTime(minPressure: minPressure, deviceType: operationData.deviceType)
+        let remainingTimer = TimeInterval(protectionTime * 60)
+        let exitTimer = TimeInterval(protectionTime / 2 * 60)
+
+        print("⚙️ Initial calculations for \(operationData.deviceType.displayName):")
+        print("   minPressure=\(minPressure), protectionTime=\(protectionTime)")
+        print("   remainingTimer=\(remainingTimer), exitTimer=\(exitTimer)")
+
+        // Создаем OperationWorkData с рассчитанными значениями
+        var workData = OperationWorkData(
+            operationData: operationData,
+            protectionTime: protectionTime,
+            minPressure: minPressure,
+            remainingTimer: remainingTimer,
+            exitTimer: exitTimer
+        )
+
+        // Розраховуємо критичний тиск та інші параметри згідно з методичними рекомендаціями
+        workData.criticalPressure = Int(OperationWorkController.calculateCriticalPressure(
+            pIncl: Double(workData.minPressure),
+            pRez: operationData.deviceType.reservePressure
+        ))
+        workData.hoodPressure = Int(OperationWorkController.calculateHoodPressure(
+            pIncl: Double(workData.minPressure),
+            pStartWork: Double(workData.criticalPressure),
+            isVictimHelping: false,
+            pRez: operationData.deviceType.reservePressure
+        ))
+        workData.evacuationTimeWithVictim = OperationWorkController.calculateEvacuationTimeWithVictim(
+            minPressure: workData.minPressure,
+            deviceType: operationData.deviceType,
+            workMode: workData.workMode
+        )
+
+        self.workData = workData
+
+        print("🎯 Created OperationWorkData with remainingTimer = \(self.workData.remainingTimer)")
 
         // Добавляем операцию в активные
         addToActiveOperations()
@@ -62,35 +102,63 @@ class OperationWorkController: NSObject, ObservableObject {
         updatedWorkData.minPressure = getMinPressureInTeam()
 
         // Рассчитываем время защитной работы аппарата
-        updatedWorkData.protectionTime = calculateProtectionTime(
+        updatedWorkData.protectionTime = OperationWorkController.calculateProtectionTime(
             minPressure: updatedWorkData.minPressure,
             deviceType: operationData.deviceType
         )
 
         // Розраховуємо критичний тиск та інші параметри згідно з методичними рекомендаціями
-        updatedWorkData.criticalPressure = Int(calculateCriticalPressure(
+        updatedWorkData.criticalPressure = Int(OperationWorkController.calculateCriticalPressure(
             pIncl: Double(updatedWorkData.minPressure),
             pRez: operationData.deviceType.reservePressure
         ))
-        updatedWorkData.hoodPressure = Int(calculateHoodPressure(
+        updatedWorkData.hoodPressure = Int(OperationWorkController.calculateHoodPressure(
             pIncl: Double(updatedWorkData.minPressure),
             pStartWork: Double(updatedWorkData.criticalPressure),
             isVictimHelping: false,
             pRez: operationData.deviceType.reservePressure
         ))
-        updatedWorkData.evacuationTimeWithVictim = calculateEvacuationTimeWithVictim(
+        updatedWorkData.evacuationTimeWithVictim = OperationWorkController.calculateEvacuationTimeWithVictim(
             minPressure: updatedWorkData.minPressure,
             deviceType: operationData.deviceType,
             workMode: updatedWorkData.workMode
         )
 
         // Устанавливаем таймеры на основе расчетов
-        updatedWorkData.remainingTimer = TimeInterval(updatedWorkData.protectionTime * 60)
-        updatedWorkData.exitTimer = TimeInterval(updatedWorkData.protectionTime / 2 * 60) // Таймер "если не найден очаг"
+        print("⚙️ Initial calculations for \(operationData.deviceType.displayName): protectionTime=\(updatedWorkData.protectionTime), minPressure=\(updatedWorkData.minPressure)")
+        print("   Device params: cylinders=\(operationData.deviceType.cylinderCount), volume=\(operationData.deviceType.cylinderVolume), reserve=\(operationData.deviceType.reservePressure)")
+        print("   Device airConsumption=\(operationData.deviceType.airConsumption)")
+
+        updatedWorkData.protectionTime = OperationWorkController.calculateProtectionTime(minPressure: updatedWorkData.minPressure, deviceType: operationData.deviceType)
+
+        print("🔧 After calculateProtectionTime: protectionTime = \(updatedWorkData.protectionTime)")
+
+        let calculatedRemaining = TimeInterval(updatedWorkData.protectionTime * 60)
+        let calculatedExit = TimeInterval(updatedWorkData.protectionTime / 2 * 60)
+
+        print("⏰ Calculated timers: protectionTime=\(updatedWorkData.protectionTime), calculatedRemaining=\(calculatedRemaining) seconds (\(calculatedRemaining/60) min), calculatedExit=\(calculatedExit) seconds (\(calculatedExit/60) min)")
+        print("🔍 Before setting: updatedWorkData.remainingTimer = \(updatedWorkData.remainingTimer)")
+
+        print("🔧 Setting remainingTimer to \(calculatedRemaining)")
+        updatedWorkData.remainingTimer = calculatedRemaining
+        updatedWorkData.exitTimer = calculatedExit
+
+        print("✅ After setting: updatedWorkData.remainingTimer = \(updatedWorkData.remainingTimer)")
+        print("📋 Final updatedWorkData: protectionTime=\(updatedWorkData.protectionTime), remainingTimer=\(updatedWorkData.remainingTimer)")
+
+        workData = updatedWorkData
+
+        print("🔄 After workData = updatedWorkData: workData.remainingTimer = \(workData.remainingTimer)")
+
+        self.workData = workData
+
+        print("🎯 Final self.workData.remainingTimer = \(self.workData.remainingTimer)")
 
         workData = updatedWorkData
 
         self.workData = workData
+
+        print("🎯 OperationWorkController initialized with remainingTimer = \(self.workData.remainingTimer)")
 
         // Планируем уведомления для начальных таймеров
         scheduleAllTimerNotifications()
@@ -127,6 +195,10 @@ class OperationWorkController: NSObject, ObservableObject {
             return
         }
 
+        print("🔄 Loading data from manager for operation: \(currentOperation.operationData.commandName ?? currentOperation.operationData.operationType.displayName)")
+        print("🔄 Current operation remainingTimer: \(currentOperation.remainingTimer)")
+        print("🔄 Current operation minPressure: \(currentOperation.minPressure)")
+
         // Сначала сохраняем текущие изменения в менеджер
         appState.activeOperationsManager.updateActiveOperation(workData)
 
@@ -134,14 +206,50 @@ class OperationWorkController: NSObject, ObservableObject {
         // Всегда загружаем данные текущей операции, независимо от ID
         workData = currentOperation
 
+        print("✅ Loaded data. New remainingTimer: \(workData.remainingTimer), minPressure: \(workData.minPressure)")
+
         // Проверяем, нужно ли проиграть звуки
         checkForTimerSounds(oldWorkData: oldWorkData, newWorkData: currentOperation)
+
+        // Пересчитываем параметры на случай изменений в команде
+        recalculateInitialParameters()
     }
 
     // Сохранение изменений в менеджер операций
     func saveChangesToManager() {
         guard let appState = appState else { return }
         appState.activeOperationsManager.updateActiveOperation(workData)
+    }
+
+
+    // Пересчет начальных параметров (для случаев изменения данных команды)
+    func recalculateInitialParameters() {
+        print("🔄 Recalculating initial parameters")
+        var updatedWorkData = workData
+
+        updatedWorkData.minPressure = getMinPressureInTeam()
+        updatedWorkData.protectionTime = OperationWorkController.calculateProtectionTime(
+            minPressure: updatedWorkData.minPressure,
+            deviceType: workData.operationData.deviceType
+        )
+
+        // Пересчитываем критичний тиск та інші параметри
+        updatedWorkData.criticalPressure = Int(OperationWorkController.calculateCriticalPressure(
+            pIncl: Double(updatedWorkData.minPressure),
+            pRez: workData.operationData.deviceType.reservePressure
+        ))
+
+        // Обновляем таймеры
+        let oldRemaining = updatedWorkData.remainingTimer
+        updatedWorkData.remainingTimer = TimeInterval(updatedWorkData.protectionTime * 60)
+        updatedWorkData.exitTimer = TimeInterval(updatedWorkData.protectionTime / 2 * 60)
+
+        workData = updatedWorkData
+
+        print("✅ Recalculated: minPressure=\(updatedWorkData.minPressure), protectionTime=\(updatedWorkData.protectionTime)")
+        print("⏰ Updated timers: remainingTimer \(oldRemaining) -> \(updatedWorkData.remainingTimer)")
+
+        saveChangesToManager()
     }
 
     // Обновление только таймеров (для глобального таймера)
@@ -234,7 +342,61 @@ class OperationWorkController: NSObject, ObservableObject {
     /// Получить минимальное давление среди активных членов ланки
     func getMinPressureInTeam() -> Int {
         let activeMembers = workData.operationData.members.filter { $0.isActive }
-        return activeMembers.compactMap { Int($0.pressure) }.min() ?? 0
+        let pressures = activeMembers.compactMap { Int($0.pressure) }
+        let minPressure = pressures.min() ?? 0
+        print("👥 Team pressures: \(pressures) from members: \(activeMembers.map { $0.fullName + ":\($0.pressure)" }), minPressure: \(minPressure)")
+        return minPressure
+    }
+
+    /// Получить минимальное давление из operationData (статический расчет)
+    static func getMinPressureInTeam(from operationData: OperationData) -> Int {
+        let activeMembers = operationData.members.filter { $0.isActive }
+        let pressures = activeMembers.compactMap { Int($0.pressure) }
+        return pressures.min() ?? 0
+    }
+
+    /// Factory method to create correctly initialized OperationWorkData
+    static func createInitialWorkData(from operationData: OperationData) -> OperationWorkData {
+        print("🏭 Factory creating WorkData for \(operationData.deviceType.displayName)...")
+        
+        let minPressure = getMinPressureInTeam(from: operationData)
+        let protectionTime = calculateProtectionTime(minPressure: minPressure, deviceType: operationData.deviceType)
+        
+        print("   Factory calculations: minPressure=\(minPressure), protectionTime=\(protectionTime)")
+        
+        let remainingTimer = TimeInterval(protectionTime * 60)
+        let exitTimer = TimeInterval(protectionTime / 2 * 60)
+        
+        var workData = OperationWorkData(
+            operationData: operationData,
+            protectionTime: protectionTime,
+            minPressure: minPressure,
+            remainingTimer: remainingTimer,
+            exitTimer: exitTimer
+        )
+        
+        // Дополнительные расчеты
+        workData.criticalPressure = Int(calculateCriticalPressure(
+            pIncl: Double(minPressure),
+            pRez: operationData.deviceType.reservePressure
+        ))
+        
+        workData.hoodPressure = Int(calculateHoodPressure(
+            pIncl: Double(minPressure),
+            pStartWork: Double(workData.criticalPressure),
+            isVictimHelping: false,
+            pRez: operationData.deviceType.reservePressure
+        ))
+        
+        workData.evacuationTimeWithVictim = calculateEvacuationTimeWithVictim(
+            minPressure: minPressure,
+            deviceType: operationData.deviceType,
+            workMode: workData.workMode
+        )
+        
+        print("✅ Factory WorkData created with remainingTimer = \(workData.remainingTimer)")
+        
+        return workData
     }
 
     /// Получить минимальный порог давления для типа аппарата
@@ -248,12 +410,15 @@ class OperationWorkController: NSObject, ObservableObject {
     }
 
     func startWorkInDangerZone() {
+        print("🚀 Starting work in danger zone. lowestPressure: \(workData.lowestPressure)")
+
         // Защита от повторного выполнения, если алерт уже показан
         if alertAlreadyShown {
             return
         }
 
         let minPressureNearFire = Int(workData.lowestPressure) ?? 0
+        print("📊 minPressureNearFire: \(minPressureNearFire)")
 
         // Обновляем минимальное давление в команде
         var updatedWorkData = workData
@@ -320,7 +485,7 @@ class OperationWorkController: NSObject, ObservableObject {
                 let nBal = Double(workData.operationData.deviceType.cylinderCount)
                 let vBal = Double(workData.operationData.deviceType.cylinderVolume)
                 let pAtm = 1.0
-                updatedWorkData.workTime = Int(calculateWorkTimeAir(nBal: nBal, vBal: vBal, pRob: pressureDifference, qVitr: actualAirConsumption, pAtm: pAtm))
+                updatedWorkData.workTime = Int(OperationWorkController.calculateWorkTimeAir(nBal: nBal, vBal: vBal, pRob: pressureDifference, qVitr: actualAirConsumption, pAtm: pAtm))
             } else {
                 updatedWorkData.workTime = 0 // Давление уже ниже порога выхода
             }
@@ -333,7 +498,7 @@ class OperationWorkController: NSObject, ObservableObject {
             if remainingPressure > 0 {
                 let nBal = Double(workData.operationData.deviceType.cylinderCount)
                 let vBal = Double(workData.operationData.deviceType.cylinderVolume)
-                let remainingTimeMinutes = calculateWorkTimeAir(nBal: nBal, vBal: vBal, pRob: remainingPressure, qVitr: actualAirConsumption, pAtm: 1.0)
+                let remainingTimeMinutes = OperationWorkController.calculateWorkTimeAir(nBal: nBal, vBal: vBal, pRob: remainingPressure, qVitr: actualAirConsumption, pAtm: 1.0)
                 updatedWorkData.remainingTimer = TimeInterval(remainingTimeMinutes * 60)
             } else {
                 updatedWorkData.remainingTimer = 0
@@ -350,8 +515,11 @@ class OperationWorkController: NSObject, ObservableObject {
         }
         workData = updatedWorkData
 
+        print("✅ Work in danger zone completed. New remainingTimer: \(workData.remainingTimer), exitTimer: \(workData.exitTimer)")
+
         // Сохраняем изменения
         saveChangesToManager()
+        print("💾 Changes saved to manager")
     }
 
     func startExitFromDangerZone() {
@@ -421,19 +589,27 @@ class OperationWorkController: NSObject, ObservableObject {
     // MARK: - Work Calculations
 
     /// Рассчитать время защитной работы аппарата (згідно з методичними рекомендаціями)
-    func calculateProtectionTime(minPressure: Int, deviceType: DeviceType) -> Int {
+    static func calculateProtectionTime(minPressure: Int, deviceType: DeviceType) -> Int {
         let nBal = Double(deviceType.cylinderCount)
         let vBal = deviceType.cylinderVolume
         let pRob = Double(minPressure) - deviceType.reservePressure
-        let qVitr = workData.workMode.airConsumption  // використовуємо режим роботи
+        let qVitr = deviceType.airConsumption  // використовуємо расход повітря для даного типу апарата
         let pAtm = 1.0
 
-        let time = calculateWorkTimeAir(nBal: nBal, vBal: vBal, pRob: pRob, qVitr: qVitr, pAtm: pAtm)
+        print("🔢 Calculating protection time for \(deviceType.displayName):")
+        print("   minPressure=\(minPressure), cylinderCount=\(nBal), cylinderVolume=\(vBal), reservePressure=\(deviceType.reservePressure)")
+        print("   pRob=\(pRob), qVitr=\(qVitr)")
+
+        let numerator = nBal * vBal * pRob
+        let denominator = qVitr * pAtm
+        let time = numerator / denominator
+
+        print("   Calculation: (\(nBal) * \(vBal) * \(pRob)) / (\(qVitr) * \(pAtm)) = \(numerator) / \(denominator) = \(time) minutes")
         return Int(time)
     }
 
     /// Расчет времени работы (новая формула из Gemini)
-    func calculateWorkTimeAir(nBal: Double, vBal: Double, pRob: Double, qVitr: Double, pAtm: Double = 1.0) -> Double {
+    static func calculateWorkTimeAir(nBal: Double, vBal: Double, pRob: Double, qVitr: Double, pAtm: Double = 1.0) -> Double {
         return (nBal * vBal * pRob) / (qVitr * pAtm)
     }
 
@@ -449,7 +625,7 @@ class OperationWorkController: NSObject, ObservableObject {
         let vBal = deviceType.cylinderVolume
         let qVitr = workMode.airConsumption
 
-        let time = calculateWorkTimeAir(nBal: nBal, vBal: vBal, pRob: pRob, qVitr: qVitr)
+        let time = OperationWorkController.calculateWorkTimeAir(nBal: nBal, vBal: vBal, pRob: pRob, qVitr: qVitr)
         return Int(time)
     }
 
@@ -492,7 +668,7 @@ class OperationWorkController: NSObject, ObservableObject {
 
         // Якщо тиск не змінився, повертаємо стандартний расход
         if pressureSpent <= 0 {
-            return workData.workMode.airConsumption
+            return workData.operationData.deviceType.airConsumption
         }
 
         // Якщо час пошуку = 0, але тиск змінився, встановлюємо мінімальний час 0.5 хвилин
@@ -507,8 +683,9 @@ class OperationWorkController: NSObject, ObservableObject {
         let actualConsumption = volumeSpent / effectiveSearchTime
 
         // Обмежуємо мінімальний і максимальний расход згідно з характеристиками апарата
-        let minConsumption = workData.workMode.airConsumption * 0.5  // 20 л/мин
-        let maxConsumption = workData.workMode.airConsumption * 2.0  // 80 л/мин (максимум для Drager PSS3000)
+        let deviceConsumption = workData.operationData.deviceType.airConsumption
+        let minConsumption = deviceConsumption * 0.5
+        let maxConsumption = deviceConsumption * 2.0
 
         // Якщо розрахунковий расход перевищує максимум, видаємо попередження
         if actualConsumption > maxConsumption {
@@ -528,7 +705,7 @@ class OperationWorkController: NSObject, ObservableObject {
         let qVitr = actualAirConsumption
         let pAtm = 1.0
 
-        let time = calculateWorkTimeAir(nBal: nBal, vBal: vBal, pRob: pRob, qVitr: qVitr, pAtm: pAtm)
+        let time = OperationWorkController.calculateWorkTimeAir(nBal: nBal, vBal: vBal, pRob: pRob, qVitr: qVitr, pAtm: pAtm)
         return Int(time)
     }
 
@@ -547,13 +724,13 @@ class OperationWorkController: NSObject, ObservableObject {
         let vBal = deviceType.cylinderVolume
         let pAtm = 1.0
 
-        let exitTime = calculateWorkTimeAir(nBal: nBal, vBal: vBal, pRob: exitPressure, qVitr: actualAirConsumption, pAtm: pAtm)
+        let exitTime = OperationWorkController.calculateWorkTimeAir(nBal: nBal, vBal: vBal, pRob: exitPressure, qVitr: actualAirConsumption, pAtm: pAtm)
 
         return Int(exitTime)
     }
 
     /// Критичний тиск (P_кр) - згідно з методичними рекомендаціями
-    func calculateCriticalPressure(pIncl: Double, pRez: Double = 50.0) -> Double {
+    static func calculateCriticalPressure(pIncl: Double, pRez: Double = 50.0) -> Double {
         return (pIncl - pRez) / 2
     }
 
@@ -571,19 +748,19 @@ class OperationWorkController: NSObject, ObservableObject {
 
     /// Розрахунок часу роботи з урахуванням критичного тиску
     func calculateWorkTimeWithCriticalPressure(minPressure: Int, deviceType: DeviceType, workMode: WorkMode) -> Int {
-        let criticalPressure = calculateCriticalPressure(pIncl: Double(minPressure), pRez: deviceType.reservePressure)
+        let criticalPressure = OperationWorkController.calculateCriticalPressure(pIncl: Double(minPressure), pRez: deviceType.reservePressure)
         let nBal = Double(deviceType.cylinderCount)
         let vBal = deviceType.cylinderVolume
         let qVitr = workMode.airConsumption
         let pAtm = 1.0
 
         // Розрахунок часу до критичного тиску
-        let time = calculateWorkTimeAir(nBal: nBal, vBal: vBal, pRob: criticalPressure, qVitr: qVitr, pAtm: pAtm)
+        let time = OperationWorkController.calculateWorkTimeAir(nBal: nBal, vBal: vBal, pRob: criticalPressure, qVitr: qVitr, pAtm: pAtm)
         return Int(time)
     }
 
     /// Необхідний тиск для застосування капюшона (згідно з методичними рекомендаціями)
-    func calculateHoodPressure(pIncl: Double, pStartWork: Double, isVictimHelping: Bool, pRez: Double = 50.0) -> Double {
+    static func calculateHoodPressure(pIncl: Double, pStartWork: Double, isVictimHelping: Bool, pRez: Double = 50.0) -> Double {
         let diff = pIncl - pStartWork
         if isVictimHelping {
             // Для рятування постраждалого: 3 * (P_поч - P_поч.роб) + P_рез
@@ -595,7 +772,7 @@ class OperationWorkController: NSObject, ObservableObject {
     }
 
     /// Розрахунок часу евакуації з постраждалим
-    func calculateEvacuationTimeWithVictim(minPressure: Int, deviceType: DeviceType, workMode: WorkMode) -> Int {
+    static func calculateEvacuationTimeWithVictim(minPressure: Int, deviceType: DeviceType, workMode: WorkMode) -> Int {
         let criticalPressure = calculateCriticalPressure(pIncl: Double(minPressure), pRez: deviceType.reservePressure)
         let hoodPressure = calculateHoodPressure(pIncl: Double(minPressure), pStartWork: criticalPressure, isVictimHelping: true, pRez: deviceType.reservePressure)
 

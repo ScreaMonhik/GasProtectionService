@@ -122,6 +122,7 @@ class ActiveOperationsManager: ObservableObject {
     func addActiveOperation(_ operation: OperationWorkData) {
         _activeOperations.append(operation)
         print("Added active operation: \(operation.operationData.commandName ?? "Unknown") at \(Date())")
+        print("Operation details: protectionTime=\(operation.protectionTime), minPressure=\(operation.minPressure), remainingTimer=\(operation.remainingTimer) seconds")
         print("Total active operations: \(_activeOperations.count)")
         // Если это первая операция, сделать её текущей
         if _activeOperations.count == 1 {

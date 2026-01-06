@@ -38,53 +38,6 @@ struct CheckCommand: Codable, Identifiable {
     }
 }
 
-enum DeviceType: String, Codable, CaseIterable {
-    case dragerPSS3000 = "Drager PSS3000"
-    case dragerPSS4000 = "Drager PSS4000"
-    case asp2 = "АСП-2"
-    case msa = "MSA"
-
-    var displayName: String {
-        return self.rawValue
-    }
-
-    var protectionTimeMinutes: Int {
-        switch self {
-        case .dragerPSS3000:
-            return 35
-        case .dragerPSS4000:
-            return 40
-        case .asp2:
-            return 37
-        case .msa:
-            return 39
-        }
-    }
-
-    var cylinderVolume: Double {
-        switch self {
-        case .dragerPSS3000, .dragerPSS4000:
-            return 6.8  // литры
-        case .asp2:
-            return 7.0  // литры
-        case .msa:
-            return 6.0  // литры
-        }
-    }
-
-    var cylinderCount: Int {
-        return 1  // обычно 1 баллон
-    }
-
-    var reservePressure: Double {
-        switch self {
-        case .dragerPSS3000, .dragerPSS4000, .msa:
-            return 50.0  // бар
-        case .asp2:
-            return 30.0  // бар
-        }
-    }
-}
 
 struct TeamMember: Codable, Identifiable {
     let id: UUID

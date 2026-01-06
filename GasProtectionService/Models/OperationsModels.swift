@@ -77,7 +77,7 @@ struct OperationSettings: Codable {
 
 // MARK: - Operation Data
 struct OperationData: Codable, Identifiable {
-    let id: UUID
+    var id: UUID
     let createdDate: Date
     var commandName: String? // Название команды/ланки
     var operationType: OperationType
@@ -127,9 +127,9 @@ enum WorkMode: Int, Codable {
 
 // MARK: - Operation Work Data
 struct OperationWorkData: Codable, Identifiable {
-    let id: UUID
+    var id: UUID
     let createdDate: Date
-    let operationData: OperationData
+    var operationData: OperationData
 
     // Work parameters
     var workMode: WorkMode = .average
@@ -138,8 +138,8 @@ struct OperationWorkData: Codable, Identifiable {
     var protectionTime: Int = 0  // время защитной работы аппарата (статичное)
 
     // Timers (активные, уменьшаются со временем)
-    var exitTimer: TimeInterval = 15 * 60 // 15 minutes
-    var remainingTimer: TimeInterval = 35 * 60 // 35 minutes
+    var exitTimer: TimeInterval = 0 // Initially 0, calculated later
+    var remainingTimer: TimeInterval = 0 // Initially 0, calculated later
 //    var communicationTimer: TimeInterval = 10 * 60 // 10 minutes
     var communicationTimer: TimeInterval = 15 // 15 seconds (for Debug purposes)
 
@@ -175,6 +175,16 @@ struct OperationWorkData: Codable, Identifiable {
         self.operationData = operationData
     }
 
+    init(operationData: OperationData, protectionTime: Int, minPressure: Int, remainingTimer: TimeInterval, exitTimer: TimeInterval) {
+        self.id = UUID()
+        self.createdDate = Date()
+        self.operationData = operationData
+        self.protectionTime = protectionTime
+        self.minPressure = minPressure
+        self.remainingTimer = remainingTimer
+        self.exitTimer = exitTimer
+    }
+
     var formattedFireSourceFoundTime: String {
         guard let time = fireSourceFoundTime else { return "--:--" }
         let formatter = DateFormatter()
@@ -198,11 +208,13 @@ struct OperationWorkData: Codable, Identifiable {
 
     var expectedExitTime: String {
         guard let entryTime = operationData.settings.entryTime else { return "--:--" }
-        // Добавляем время защитной работы аппарата (protectionTime в минутах)
-        let exitTime = entryTime.addingTimeInterval(TimeInterval(protectionTime * 60))
+        // Добавляем время оставшейся работы (remainingTimer в секундах)
+        let exitTime = entryTime.addingTimeInterval(TimeInterval(remainingTimer))
         let formatter = DateFormatter()
         formatter.dateFormat = "HH:mm"
-        return formatter.string(from: exitTime)
+        let result = formatter.string(from: exitTime)
+        // print("📅 expectedExitTime: remainingTimer=\(remainingTimer), result=\(result)")
+        return result
     }
 
     var consumptionRate: String {

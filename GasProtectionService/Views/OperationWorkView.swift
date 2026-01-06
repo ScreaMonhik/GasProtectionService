@@ -34,7 +34,7 @@ struct OperationWorkView: View {
         } else {
             // Создаем пустую операцию для инициализации
             let emptyData = OperationData()
-            let workData = OperationWorkData(operationData: emptyData)
+            let workData = OperationWorkController.createInitialWorkData(from: emptyData)
             controller = OperationWorkController(existingOperation: workData, appState: appState)
         }
 
@@ -67,9 +67,16 @@ struct OperationWorkView: View {
         }
 
         // Обновляем только локальные переменные отображения
+        let oldRemaining = displayRemainingTimer
         displayExitTimer = currentOperation.exitTimer
         displayRemainingTimer = currentOperation.remainingTimer
         displayCommunicationTimer = currentOperation.communicationTimer
+
+        print("🔄 UI Update: remainingTimer \(oldRemaining) -> \(displayRemainingTimer) (from operation: \(currentOperation.remainingTimer))")
+
+        if oldRemaining != displayRemainingTimer {
+            print("🔄 UI Updated: remainingTimer \(oldRemaining) -> \(displayRemainingTimer)")
+        }
     }
 
 
@@ -465,7 +472,7 @@ struct OperationWorkView: View {
                         print("Selected command: \(selectedCommand.commandName)")
                         let operationData = CommandCreationController.convertCheckCommandToOperationData(selectedCommand)
                         print("Created operation data with commandName: \(operationData.commandName ?? "nil")")
-                        let workData = OperationWorkData(operationData: operationData)
+                        let workData = OperationWorkController.createInitialWorkData(from: operationData)
                         appState.activeOperationsManager.addActiveOperation(workData)
                         // Автоматически переключаемся на новую операцию
                         appState.activeOperationsManager.switchToOperation(withId: workData.id)
@@ -500,7 +507,7 @@ struct OperationWorkView: View {
                     showingCreateCommand = false
                     // После создания команды, автоматически создаем новую операцию
                     let operationData = CommandCreationController.convertCheckCommandToOperationData(newCommand)
-                    let workData = OperationWorkData(operationData: operationData)
+                    let workData = OperationWorkController.createInitialWorkData(from: operationData)
                     appState.activeOperationsManager.addActiveOperation(workData)
                     // Автоматически переключаемся на новую операцию
                     appState.activeOperationsManager.switchToOperation(withId: workData.id)
