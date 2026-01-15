@@ -20,6 +20,7 @@ struct OperationWorkView: View {
     @State private var displayExitTimer: TimeInterval = 0
     @State private var displayRemainingTimer: TimeInterval = 0
     @State private var displayCommunicationTimer: TimeInterval = 0
+    @State private var manualPressureInput = ""
     var onSave: (CheckCommand) -> Void
     
     
@@ -79,6 +80,82 @@ struct OperationWorkView: View {
         }
     }
 
+    // Функция для обработки ввода давления и ограничения
+    private func processPressureInput(_ input: String) -> String {
+        // Оставляем только цифры
+        let digitsOnly = input.filter { $0.isNumber }
+
+        // Ограничиваем до 3 цифр
+        let limitedDigits = String(digitsOnly.prefix(3))
+
+        // Преобразуем в число и проверяем, не больше ли минимального давления в команде
+        if let pressureValue = Int(limitedDigits), pressureValue > 0 {
+            let minPressureInTeam = controller.getMinPressureInTeam()
+            if pressureValue > minPressureInTeam {
+                // Если введенное значение больше минимального давления в команде, ограничиваем его
+                return String(minPressureInTeam)
+            }
+        }
+
+        return limitedDigits
+    }
+
+    // Функция для пересчета таймера "Залишок" при ручном вводе давления
+    private func recalculateRemainingTimer(for manualPressure: Int) {
+        print("🔧 Recalculating remaining timer for manual pressure: \(manualPressure)")
+
+        // Используем формулу расчета времени защитной работы аппарата
+        let protectionTime = GasCalculator.calculateProtectionTime(
+            minPressure: manualPressure,
+            deviceType: controller.workData.operationData.deviceType
+        )
+
+        let newRemainingTimer = TimeInterval(protectionTime * 60)
+
+        print("🔧 New protection time: \(protectionTime) min, remaining timer: \(newRemainingTimer) seconds")
+
+        // Проверяем на повышенный расход воздуха (аналогично startWorkInDangerZone)
+        checkForHighAirConsumption(manualPressure: manualPressure, protectionTime: protectionTime)
+
+        // Обновляем локальное отображение
+        displayRemainingTimer = newRemainingTimer
+
+        // Сохраняем изменения в глобальном состоянии через менеджер
+        var updatedWorkData = controller.workData
+        updatedWorkData.remainingTimer = newRemainingTimer
+        updatedWorkData.protectionTime = protectionTime
+        updatedWorkData.minPressure = manualPressure
+
+        appState.activeOperationsManager.updateActiveOperation(updatedWorkData)
+    }
+
+    // Функция проверки на повышенный расход воздуха
+    private func checkForHighAirConsumption(manualPressure: Int, protectionTime: Int) {
+        // Рассчитываем текущий расход воздуха при данном давлении
+        // Используем упрощенную логику: если время работы слишком мало, значит расход высокий
+        let deviceType = controller.workData.operationData.deviceType
+        let standardConsumption = deviceType.airConsumption
+
+        // Рассчитываем объем воздуха, доступный при данном давлении
+        let nBal = Double(deviceType.cylinderCount)
+        let vBal = Double(deviceType.cylinderVolume)
+        let pRob = Double(manualPressure) - Double(deviceType.reservePressure)
+        let availableVolume = (nBal * vBal * pRob) / 1.0 // P_atm = 1 бар
+
+        // Рассчитываем эффективный расход (объем / время в минутах)
+        let effectiveConsumption = availableVolume / Double(protectionTime)
+
+        print("🔍 Air consumption check: standard=\(standardConsumption), effective=\(effectiveConsumption), protectionTime=\(protectionTime) min")
+
+        // Если эффективный расход превышает стандартный в 2 раза, показываем предупреждение
+        let maxAllowedConsumption = standardConsumption * 2.0
+        if effectiveConsumption > maxAllowedConsumption {
+            controller.consumptionWarningMessage = "⚠️ УВАГА: Висока витрата повітря! \n(\(Int(effectiveConsumption)) л/хв) \n\nПеревірте щільність прилягання маски та зʼєднань апарату."
+            controller.showingConsumptionWarning = true
+            print("⚠️ High air consumption detected: \(effectiveConsumption) > \(maxAllowedConsumption)")
+        }
+    }
+
 
     var body: some View {
         NavigationView {
@@ -131,7 +208,7 @@ struct OperationWorkView: View {
                         }
                     }
                         .padding(.horizontal)
-                        
+
                         // Calculation Data Header
                         VStack(alignment: .leading, spacing: 16) {
                             Text("Розрахункові дані")
@@ -148,7 +225,8 @@ struct OperationWorkView: View {
                                     Spacer()
                                     Text(controller.workData.operationData.formattedEntryTime)
                                         .font(.body)
-                                        .foregroundColor(.secondary)
+                                        .foregroundColor(.green)
+                                        .bold()
                                 }
                                 
                                 HStack {
@@ -158,7 +236,8 @@ struct OperationWorkView: View {
                                     Spacer()
                                     Text(controller.workData.expectedExitTime)
                                         .font(.body)
-                                        .foregroundColor(.secondary)
+                                        .foregroundColor(.red)
+                                        .bold()
                                 }
                             }
                             .padding()
@@ -188,38 +267,38 @@ struct OperationWorkView: View {
                                 .cornerRadius(12)
                             }
                             
-                            // Bottom Timers
-                            HStack(spacing: 16) {
-                                VStack(alignment: .leading) {
-                                    Text("Залишок")
-                                        .font(.body)
-                                        .foregroundColor(.primary)
-                                    Text(controller.formatTime(displayRemainingTimer))
-                                        .font(.title3)
-                                        .fontWeight(.bold)
-                                        .foregroundColor(.blue)
-                                }
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(Color(.systemGray6))
-                                .cornerRadius(12)
-                                .contentShape(Rectangle())
-                                
-                                VStack(alignment: .leading) {
-                                    Text("Звʼязок")
-                                        .font(.body)
-                                        .foregroundColor(.primary)
-                                    Text(controller.formatTime(displayCommunicationTimer))
-                                        .font(.title3)
-                                        .fontWeight(.bold)
-                                        .foregroundColor(.green)
-                                }
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(Color(.systemGray6))
-                                .cornerRadius(12)
-                                .contentShape(Rectangle())
-                            }
+                            // Bottom Timers - moved to be above button
+                            // HStack(spacing: 16) {
+                            //     VStack(alignment: .leading) {
+                            //         Text("Залишок")
+                            //             .font(.body)
+                            //             .foregroundColor(.primary)
+                            //         Text(controller.formatTime(displayRemainingTimer))
+                            //             .font(.title3)
+                            //             .fontWeight(.bold)
+                            //             .foregroundColor(.blue)
+                            //     }
+                            //     .frame(maxWidth: .infinity)
+                            //     .padding()
+                            //     .background(Color(.systemGray6))
+                            //     .cornerRadius(12)
+                            //     .contentShape(Rectangle())
+                            //
+                            //     VStack(alignment: .leading) {
+                            //         Text("Звʼязок")
+                            //             .font(.body)
+                            //             .foregroundColor(.primary)
+                            //         Text(controller.formatTime(displayCommunicationTimer))
+                            //             .font(.title3)
+                            //             .fontWeight(.bold)
+                            //             .foregroundColor(.green)
+                            //     }
+                            //     .frame(maxWidth: .infinity)
+                            //     .padding()
+                            //     .background(Color(.systemGray6))
+                            //     .cornerRadius(12)
+                            //     .contentShape(Rectangle())
+                            // }
                         }
                         .padding(.horizontal)
                         .onTapGesture {
@@ -230,18 +309,18 @@ struct OperationWorkView: View {
                         // Danger Zone Start Block
                         if controller.workData.hasFoundFireSource {
                             VStack(alignment: .leading, spacing: 12) {
+                                // HStack {
+                                //     Text("Початок роботи в НДС")
+                                //         .font(.body)
+                                //         .foregroundColor(.primary)
+                                //     Spacer()
+                                //     Text(controller.workData.formattedFireSourceFoundTime)
+                                //         .font(.body)
+                                //         .foregroundColor(.secondary)
+                                // }
+
                                 HStack {
-                                    Text("Початок роботи в НДС")
-                                        .font(.body)
-                                        .foregroundColor(.primary)
-                                    Spacer()
-                                    Text(controller.workData.formattedFireSourceFoundTime)
-                                        .font(.body)
-                                        .foregroundColor(.secondary)
-                                }
-                                
-                                HStack {
-                                    Text("Час пошуку очага")
+                                    Text("Час пошуку осередку")
                                         .font(.body)
                                         .foregroundColor(.primary)
                                     Spacer()
@@ -249,7 +328,7 @@ struct OperationWorkView: View {
                                         .font(.body)
                                         .foregroundColor(.secondary)
                                 }
-                                
+
                                 HStack {
                                     Text("Найменший тиск в ланці")
                                         .font(.body)
@@ -340,9 +419,78 @@ struct OperationWorkView: View {
                             .cornerRadius(12)
                             .padding(.horizontal)
                         }
-                        
+
+                        // Manual Pressure Input Block - above timers
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Найменший тиск в ланці")
+                                .font(.headline)
+                                .foregroundColor(.primary)
+
+                            HStack {
+                                Text("Тиск")
+                                    .font(.body)
+                                    .foregroundColor(.primary)
+                                Spacer()
+                                TextField("Тиск", text: $manualPressureInput)
+                                    .frame(width: 80)
+                                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                                    .keyboardType(.numberPad)
+                                    .multilineTextAlignment(.trailing)
+                                    .onChange(of: manualPressureInput) { newValue in
+                                        // Обрабатываем ввод и ограничиваем
+                                        let processedValue = processPressureInput(newValue)
+                                        if processedValue != newValue {
+                                            manualPressureInput = processedValue
+                                        }
+
+                                        // Пересчитываем таймер если введено корректное значение
+                                        if let pressureValue = Int(processedValue), pressureValue > 0 {
+                                            recalculateRemainingTimer(for: pressureValue)
+                                        }
+                                    }
+                            }
+                        }
+                        .padding()
+                        .background(Color(.systemGray6))
+                        .cornerRadius(12)
+                        .padding(.horizontal)
+
+                        // Timers Block - always above button
+                        HStack(spacing: 16) {
+                            VStack(alignment: .leading) {
+                                Text("Залишок")
+                                    .font(.body)
+                                    .foregroundColor(.primary)
+                                Text(controller.formatTime(displayRemainingTimer))
+                                    .font(.title3)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.blue)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color(.systemGray6))
+                            .cornerRadius(12)
+                            .contentShape(Rectangle())
+
+                            VStack(alignment: .leading) {
+                                Text("Звʼязок")
+                                    .font(.body)
+                                    .foregroundColor(.primary)
+                                Text(controller.formatTime(displayCommunicationTimer))
+                                    .font(.title3)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.green)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color(.systemGray6))
+                            .cornerRadius(12)
+                            .contentShape(Rectangle())
+                        }
+                        .padding(.horizontal)
+
                         Spacer()
-                        
+
                         // Action Button
                         Button(action: {
                             if !controller.workData.hasFoundFireSource {
@@ -462,6 +610,8 @@ struct OperationWorkView: View {
                 controller.setAppState(appState)
                 // Запускаем локальный таймер для обновления отображения
                 startDisplayTimer()
+                // Инициализируем manualPressureInput текущим минимальным давлением
+                manualPressureInput = String(controller.getMinPressureInTeam())
             }
             .onDisappear {
                 // Останавливаем локальный таймер

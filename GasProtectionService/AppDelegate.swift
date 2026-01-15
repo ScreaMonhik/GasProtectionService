@@ -260,7 +260,4 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
 
         print("✅ All active operations and notifications cleared on app termination")
     }
-
-    // MARK: - Background Handling
-
 }
