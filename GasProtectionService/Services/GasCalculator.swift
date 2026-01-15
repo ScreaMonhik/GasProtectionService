@@ -21,19 +21,19 @@ class GasCalculator {
     // MARK: - Work Calculations
     
     /// Рассчитать время защитной работы аппарата (згідно з методичними рекомендаціями)
-    static func calculateProtectionTime(minPressure: Int, deviceType: DeviceType) -> Int {
+    static func calculateProtectionTime(minPressure: Int, deviceType: DeviceType) -> Double {
         let nBal = Double(deviceType.cylinderCount)
         let vBal = deviceType.cylinderVolume
         let pRob = Double(minPressure) - deviceType.reservePressure
         let qVitr = deviceType.airConsumption
         let pAtm = 1.0
-        
+
         // Формула: (N_бал * V_бал * P_роб) / (Q_витр * K_сж)
         let numerator = nBal * vBal * pRob
         let denominator = qVitr * pAtm
         let time = numerator / denominator
-        
-        return Int(time)
+
+        return time
     }
     
     /// Расчет времени работы (универсальная формула)
@@ -92,7 +92,7 @@ class GasCalculator {
     }
     
     /// Розрахунок реального расходу повітря на основі часу пошуку очага
-    static func calculateActualAirConsumption(initialPressure: Int, currentPressure: Int, searchTimeMinutes: Int, deviceType: DeviceType) -> Double {
+    static func calculateActualAirConsumption(initialPressure: Int, currentPressure: Int, searchTimeMinutes: Double, deviceType: DeviceType) -> Double {
         // Розрахунок витраченого тиску на пошук
         let pressureSpent = Double(initialPressure - currentPressure)
         
@@ -102,7 +102,7 @@ class GasCalculator {
         }
         
         // Якщо час пошуку = 0, але тиск змінився, встановлюємо мінімальний час 0.5 хвилин
-        let effectiveSearchTime = max(Double(searchTimeMinutes), 0.5)
+        let effectiveSearchTime = max(searchTimeMinutes, 0.5)
         
         // Розрахунок об'єму повітря, витраченого на пошук
         let nBal = Double(deviceType.cylinderCount)

@@ -30,7 +30,7 @@ struct OperationWorkData: Codable, Identifiable {
     var workMode: WorkMode = .average
     var minPressure: Int = 300  // мінімальний тиск в ланці
     var initialMinPressure: Int = 300  // начальний мінімальний тиск при вході до НДС
-    var protectionTime: Int = 0  // час захисної роботи аппарата (статичне)
+    var protectionTime: Double = 0  // час захисної роботи аппарата (статичне)
 
     // Timers (активные, уменьшаются со временем)
     var exitTimer: TimeInterval = 0 // Initially 0, calculated later
@@ -60,6 +60,7 @@ struct OperationWorkData: Codable, Identifiable {
     var criticalPressure: Int = 0 // критичний тиск (згідно з методичними рекомендаціями)
     var hoodPressure: Int = 0    // тиск для застосування капюшона
     var evacuationTimeWithVictim: Int = 0 // час евакуації з постраждалим
+    var actualAirConsumption: Double = 0.0 // фактичний розхід повітря (л/хв)
 
     // Address
     var workAddress: String = ""
@@ -70,7 +71,7 @@ struct OperationWorkData: Codable, Identifiable {
         self.operationData = operationData
     }
 
-    init(operationData: OperationData, protectionTime: Int, minPressure: Int, remainingTimer: TimeInterval, exitTimer: TimeInterval) {
+    init(operationData: OperationData, protectionTime: Double, minPressure: Int, remainingTimer: TimeInterval, exitTimer: TimeInterval) {
         self.id = UUID()
         self.createdDate = Date()
         self.operationData = operationData

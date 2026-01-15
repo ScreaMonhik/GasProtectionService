@@ -15,7 +15,7 @@ struct OperationDetailsView: View {
         OperationWorkController.loadWorkDataForCommand(command.id)
     }
 
-    private var protectionTime: Int {
+    private var protectionTime: Double {
         if let workData = workData {
             return workData.protectionTime
         }

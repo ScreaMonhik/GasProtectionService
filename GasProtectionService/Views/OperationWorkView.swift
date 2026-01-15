@@ -22,6 +22,9 @@ struct OperationWorkView: View {
     @State private var displayCommunicationTimer: TimeInterval = 0
     @State private var manualPressureInput = ""
     var onSave: (CheckCommand) -> Void
+
+    // Для отслеживания скрытия клавиатуры
+    private let keyboardHidePublisher = NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)
     
     
     // Инициализатор для работы с менеджером операций
@@ -114,6 +117,26 @@ struct OperationWorkView: View {
 
         print("🔧 New protection time: \(protectionTime) min, remaining timer: \(newRemainingTimer) seconds")
 
+        // Рассчитываем фактический расход воздуха на основе времени от начала операции
+        // Получаем время начала операции
+        let entryTime = controller.workData.operationData.settings.entryTime ?? Date()
+        let currentTime = Date()
+        let elapsedTimeSeconds = currentTime.timeIntervalSince(entryTime)
+        let elapsedTimeMinutes = elapsedTimeSeconds / 60.0 // точное время с секундами
+        
+        // Получаем начальное давление
+        let initialPressure = controller.workData.initialMinPressure > 0 ? controller.workData.initialMinPressure : controller.getMinPressureInTeam()
+        
+        // Всегда рассчитываем реальный расход
+        let actualAirConsumption = GasCalculator.calculateActualAirConsumption(
+            initialPressure: initialPressure,
+            currentPressure: manualPressure,
+            searchTimeMinutes: elapsedTimeMinutes,
+            deviceType: controller.workData.operationData.deviceType
+        )
+        
+        print("🔧 actualAirConsumption: \(String(format: "%.1f", actualAirConsumption)) л/мин (elapsed: \(String(format: "%.2f", elapsedTimeMinutes)) min)")
+
         // Проверяем на повышенный расход воздуха (аналогично startWorkInDangerZone)
         checkForHighAirConsumption(manualPressure: manualPressure, protectionTime: protectionTime)
 
@@ -125,12 +148,16 @@ struct OperationWorkView: View {
         updatedWorkData.remainingTimer = newRemainingTimer
         updatedWorkData.protectionTime = protectionTime
         updatedWorkData.minPressure = manualPressure
+        updatedWorkData.actualAirConsumption = actualAirConsumption
 
+        // Обновляем controller.workData для немедленного обновления UI
+        controller.workData = updatedWorkData
+        
         appState.activeOperationsManager.updateActiveOperation(updatedWorkData)
     }
 
     // Функция проверки на повышенный расход воздуха
-    private func checkForHighAirConsumption(manualPressure: Int, protectionTime: Int) {
+    private func checkForHighAirConsumption(manualPressure: Int, protectionTime: Double) {
         // Рассчитываем текущий расход воздуха при данном давлении
         // Используем упрощенную логику: если время работы слишком мало, значит расход высокий
         let deviceType = controller.workData.operationData.deviceType
@@ -230,7 +257,7 @@ struct OperationWorkView: View {
                                 }
                                 
                                 HStack {
-                                    Text("Очікуваний час виходу ланки:")
+                                    Text("Час повернення ланки:")
                                         .font(.body)
                                         .foregroundColor(.primary)
                                     Spacer()
@@ -238,6 +265,19 @@ struct OperationWorkView: View {
                                         .font(.body)
                                         .foregroundColor(.red)
                                         .bold()
+                                }
+
+                                // Добавлено: Час пошуку осередку (показывается только после нахождения очага)
+                                if controller.workData.hasFoundFireSource {
+                                    HStack {
+                                        Text("Час пошуку осередку")
+                                            .font(.body)
+                                            .foregroundColor(.primary)
+                                        Spacer()
+                                        Text("\(controller.workData.searchTime) хв")
+                                            .font(.body)
+                                            .foregroundColor(.secondary)
+                                    }
                                 }
                             }
                             .padding()
@@ -306,119 +346,119 @@ struct OperationWorkView: View {
                             UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                         }
                         
-                        // Danger Zone Start Block
-                        if controller.workData.hasFoundFireSource {
-                            VStack(alignment: .leading, spacing: 12) {
-                                // HStack {
-                                //     Text("Початок роботи в НДС")
-                                //         .font(.body)
-                                //         .foregroundColor(.primary)
-                                //     Spacer()
-                                //     Text(controller.workData.formattedFireSourceFoundTime)
-                                //         .font(.body)
-                                //         .foregroundColor(.secondary)
-                                // }
+                        // Danger Zone Start Block - ЗАКОМЕНТОВАНО
+                        // if controller.workData.hasFoundFireSource {
+                        //     VStack(alignment: .leading, spacing: 12) {
+                        //         // HStack {
+                        //         //     Text("Початок роботи в НДС")
+                        //         //         .font(.body)
+                        //         //         .foregroundColor(.primary)
+                        //         //     Spacer()
+                        //         //     Text(controller.workData.formattedFireSourceFoundTime)
+                        //         //         .font(.body)
+                        //         //         .foregroundColor(.secondary)
+                        //         // }
 
-                                HStack {
-                                    Text("Час пошуку осередку")
-                                        .font(.body)
-                                        .foregroundColor(.primary)
-                                    Spacer()
-                                    Text("\(controller.workData.searchTime) хв")
-                                        .font(.body)
-                                        .foregroundColor(.secondary)
-                                }
+                        //         HStack {
+                        //             Text("Час пошуку осередку")
+                        //                 .font(.body)
+                        //                 .foregroundColor(.primary)
+                        //             Spacer()
+                        //             Text("\(controller.workData.searchTime) хв")
+                        //                 .font(.body)
+                        //                 .foregroundColor(.secondary)
+                        //         }
 
-                                HStack {
-                                    Text("Найменший тиск в ланці")
-                                        .font(.body)
-                                        .foregroundColor(.primary)
-                                    Spacer()
-                                    TextField("Тиск", text: $controller.workData.lowestPressure)
-                                        .frame(width: 80)
-                                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                                        .keyboardType(.decimalPad)
-                                        .disabled(controller.workData.isWorkingInDangerZone)
-                                        .opacity(controller.workData.isWorkingInDangerZone ? 0.5 : 1.0)
-                                        .multilineTextAlignment(.trailing)
-                                }
-                            }
-                            .padding()
-                            .background(Color(.systemGray6))
-                            .cornerRadius(12)
-                            .padding(.horizontal)
-                        }
+                        //         HStack {
+                        //             Text("Найменший тиск в ланці")
+                        //                 .font(.body)
+                        //                 .foregroundColor(.primary)
+                        //             Spacer()
+                        //             TextField("Тиск", text: $controller.workData.lowestPressure)
+                        //                 .frame(width: 80)
+                        //                 .textFieldStyle(RoundedBorderTextFieldStyle())
+                        //                 .keyboardType(.decimalPad)
+                        //                 .disabled(controller.workData.isWorkingInDangerZone)
+                        //                 .opacity(controller.workData.isWorkingInDangerZone ? 0.5 : 1.0)
+                        //                 .multilineTextAlignment(.trailing)
+                        //         }
+                        //     }
+                        //     .padding()
+                        //     .background(Color(.systemGray6))
+                        //     .cornerRadius(12)
+                        //     .padding(.horizontal)
+                        // }
                         
-                        // Exit Start Block
-                        if controller.workData.isWorkingInDangerZone {
-                            VStack(alignment: .leading, spacing: 12) {
-                                HStack {
-                                    Text("Час початку виходу з НДС")
-                                        .font(.body)
-                                        .foregroundColor(.primary)
-                                    Spacer()
-                                    Text(controller.workData.formattedExitTime)
-                                        .font(.body)
-                                        .foregroundColor(.secondary)
-                                }
-                                
-                                HStack {
-                                    Text("Тиск початку виходу з НДС")
-                                        .font(.body)
-                                        .foregroundColor(.primary)
-                                    Spacer()
-                                    Text(controller.workData.calculatedExitStartPressure)
-                                        .font(.body)
-                                        .foregroundColor(.secondary)
-                                }
-                            }
-                            .padding()
-                            .background(Color(.systemGray6))
-                            .cornerRadius(12)
-                            .padding(.horizontal)
-                        }
+                        // Exit Start Block - ЗАКОМЕНТОВАНО
+                        // if controller.workData.isWorkingInDangerZone {
+                        //     VStack(alignment: .leading, spacing: 12) {
+                        //         HStack {
+                        //             Text("Час початку виходу з НДС")
+                        //                 .font(.body)
+                        //                 .foregroundColor(.primary)
+                        //             Spacer()
+                        //             Text(controller.workData.formattedExitTime)
+                        //                 .font(.body)
+                        //                 .foregroundColor(.secondary)
+                        //         }
+                        //
+                        //         HStack {
+                        //             Text("Тиск початку виходу з НДС")
+                        //                 .font(.body)
+                        //                 .foregroundColor(.primary)
+                        //             Spacer()
+                        //             Text(controller.workData.calculatedExitStartPressure)
+                        //                 .font(.body)
+                        //                 .foregroundColor(.secondary)
+                        //         }
+                        //     }
+                        //     .padding()
+                        //     .background(Color(.systemGray6))
+                        //     .cornerRadius(12)
+                        //     .padding(.horizontal)
+                        // }
                         
                         
-                        // Exit Data Block
-                        if controller.workData.isExitingDangerZone {
-                            VStack(alignment: .leading, spacing: 12) {
-                                HStack {
-                                    Text("Час виходу з НДС")
-                                        .font(.body)
-                                        .foregroundColor(.primary)
-                                    Spacer()
-                                    Text(controller.workData.formattedExitTime)
-                                        .font(.body)
-                                        .foregroundColor(.secondary)
-                                }
-                                
-                                HStack {
-                                    Text("Мінімальний тиск:")
-                                        .font(.body)
-                                        .foregroundColor(.primary)
-                                    Spacer()
-                                    TextField("Тиск", text: $controller.workData.minimumExitPressure)
-                                        .frame(width: 80)
-                                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                                        .keyboardType(.decimalPad)
-                                        .multilineTextAlignment(.trailing)
-                                }
-                                
-                                HStack {
-                                    Text("Швидкість розходу")
-                                        .font(.body)
-                                        .foregroundColor(.primary)
-                                    Spacer()
-                                    Text(controller.workData.consumptionRate)
-                                        .font(.body)
-                                        .foregroundColor(.secondary)
-                                }
-                            }
-                            .padding()
-                            .background(Color(.systemGray6))
-                            .cornerRadius(12)
-                            .padding(.horizontal)
-                        }
+                        // Exit Data Block - ЗАКОМЕНТОВАНО
+                        // if controller.workData.isExitingDangerZone {
+                        //     VStack(alignment: .leading, spacing: 12) {
+                        //         HStack {
+                        //             Text("Час виходу з НДС")
+                        //                 .font(.body)
+                        //                 .foregroundColor(.primary)
+                        //             Spacer()
+                        //             Text(controller.workData.formattedExitTime)
+                        //                 .font(.body)
+                        //                 .foregroundColor(.secondary)
+                        //         }
+                        //
+                        //         HStack {
+                        //             Text("Мінімальний тиск:")
+                        //                 .font(.body)
+                        //                 .foregroundColor(.primary)
+                        //             Spacer()
+                        //             TextField("Тиск", text: $controller.workData.minimumExitPressure)
+                        //                 .frame(width: 80)
+                        //                 .textFieldStyle(RoundedBorderTextFieldStyle())
+                        //                 .keyboardType(.decimalPad)
+                        //                 .multilineTextAlignment(.trailing)
+                        //         }
+                        //
+                        //         HStack {
+                        //             Text("Швидкість розходу")
+                        //                 .font(.body)
+                        //                 .foregroundColor(.primary)
+                        //             Spacer()
+                        //             Text(controller.workData.consumptionRate)
+                        //                 .font(.body)
+                        //                 .foregroundColor(.secondary)
+                        //         }
+                        //     }
+                        //     .padding()
+                        //     .background(Color(.systemGray6))
+                        //     .cornerRadius(12)
+                        //     .padding(.horizontal)
+                        // }
 
                         // Manual Pressure Input Block - above timers
                         VStack(alignment: .leading, spacing: 12) {
@@ -437,17 +477,34 @@ struct OperationWorkView: View {
                                     .keyboardType(.numberPad)
                                     .multilineTextAlignment(.trailing)
                                     .onChange(of: manualPressureInput) { newValue in
-                                        // Обрабатываем ввод и ограничиваем
+                                        // Обрабатываем ввод и ограничиваем (только валидация, без перерасчета)
                                         let processedValue = processPressureInput(newValue)
                                         if processedValue != newValue {
                                             manualPressureInput = processedValue
                                         }
 
-                                        // Пересчитываем таймер если введено корректное значение
+                                        // Обновляем lowestPressure сразу при изменении (без перерасчета расхода)
                                         if let pressureValue = Int(processedValue), pressureValue > 0 {
-                                            recalculateRemainingTimer(for: pressureValue)
+                                            controller.workData.lowestPressure = processedValue
+                                            appState.activeOperationsManager.updateActiveOperation(controller.workData)
                                         }
                                     }
+                            }
+
+                            HStack {
+                                Text("Розхід:")
+                                    .font(.body)
+                                    .foregroundColor(.primary)
+                                Spacer()
+                                Text(controller.workData.actualAirConsumption > 0 ? "\(Int(controller.workData.actualAirConsumption)) л/хв" : "\(controller.workData.operationData.deviceType.airConsumption) л/хв")
+                                    .font(.body)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        .onReceive(keyboardHidePublisher) { _ in
+                            // Перерасчет при скрытии клавиатуры
+                            if let pressureValue = Int(manualPressureInput), pressureValue > 0 {
+                                recalculateRemainingTimer(for: pressureValue)
                             }
                         }
                         .padding()
@@ -690,8 +747,8 @@ struct OperationWorkView: View {
             if !controller.workData.hasFoundFireSource {
                 return false
             } else if !controller.workData.isWorkingInDangerZone {
-                // Кнопка "Почати роботу в осередку пожежі" неактивна, пока не введен lowestPressure
-                return controller.workData.lowestPressure.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                // Кнопка "Почати роботу в осередку пожежі" всегда активна
+                return false
             } else {
                 return false
             }

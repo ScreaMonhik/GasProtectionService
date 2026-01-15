@@ -564,7 +564,7 @@ class OperationWorkController: NSObject, ObservableObject {
             let actualAirConsumption = GasCalculator.calculateActualAirConsumption(
                 initialPressure: updatedWorkData.initialMinPressure,
                 currentPressure: minPressureNearFire,
-                searchTimeMinutes: workData.searchTime,
+                searchTimeMinutes: Double(workData.searchTime),
                 deviceType: workData.operationData.deviceType
             )
             
