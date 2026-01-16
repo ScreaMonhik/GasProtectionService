@@ -138,7 +138,7 @@ struct OperationWorkView: View {
         print("🔧 actualAirConsumption: \(String(format: "%.1f", actualAirConsumption)) л/мин (elapsed: \(String(format: "%.2f", elapsedTimeMinutes)) min)")
 
         // Проверяем на повышенный расход воздуха (аналогично startWorkInDangerZone)
-        checkForHighAirConsumption(manualPressure: manualPressure, protectionTime: protectionTime)
+        checkForHighAirConsumption(actualAirConsumption: actualAirConsumption)
 
         // Обновляем локальное отображение
         displayRemainingTimer = newRemainingTimer
@@ -157,29 +157,18 @@ struct OperationWorkView: View {
     }
 
     // Функция проверки на повышенный расход воздуха
-    private func checkForHighAirConsumption(manualPressure: Int, protectionTime: Double) {
-        // Рассчитываем текущий расход воздуха при данном давлении
-        // Используем упрощенную логику: если время работы слишком мало, значит расход высокий
+    private func checkForHighAirConsumption(actualAirConsumption: Double) {
         let deviceType = controller.workData.operationData.deviceType
         let standardConsumption = deviceType.airConsumption
 
-        // Рассчитываем объем воздуха, доступный при данном давлении
-        let nBal = Double(deviceType.cylinderCount)
-        let vBal = Double(deviceType.cylinderVolume)
-        let pRob = Double(manualPressure) - Double(deviceType.reservePressure)
-        let availableVolume = (nBal * vBal * pRob) / 1.0 // P_atm = 1 бар
+        print("🔍 Air consumption check: standard=\(standardConsumption), actual=\(actualAirConsumption)")
 
-        // Рассчитываем эффективный расход (объем / время в минутах)
-        let effectiveConsumption = availableVolume / Double(protectionTime)
-
-        print("🔍 Air consumption check: standard=\(standardConsumption), effective=\(effectiveConsumption), protectionTime=\(protectionTime) min")
-
-        // Если эффективный расход превышает стандартный в 2 раза, показываем предупреждение
+        // Если фактический расход превышает стандартный в 2 раза, показываем предупреждение
         let maxAllowedConsumption = standardConsumption * 2.0
-        if effectiveConsumption > maxAllowedConsumption {
-            controller.consumptionWarningMessage = "⚠️ УВАГА: Висока витрата повітря! \n(\(Int(effectiveConsumption)) л/хв) \n\nПеревірте щільність прилягання маски та зʼєднань апарату."
+        if actualAirConsumption > maxAllowedConsumption {
+            controller.consumptionWarningMessage = "⚠️ УВАГА: Висока витрата повітря! \n(\(Int(actualAirConsumption)) л/хв) \n\nПеревірте щільність прилягання маски та зʼєднань апарату."
             controller.showingConsumptionWarning = true
-            print("⚠️ High air consumption detected: \(effectiveConsumption) > \(maxAllowedConsumption)")
+            print("⚠️ High air consumption detected: \(actualAirConsumption) > \(maxAllowedConsumption)")
         }
     }
 
@@ -496,7 +485,7 @@ struct OperationWorkView: View {
                                     .font(.body)
                                     .foregroundColor(.primary)
                                 Spacer()
-                                Text(controller.workData.actualAirConsumption > 0 ? "\(Int(controller.workData.actualAirConsumption)) л/хв" : "\(controller.workData.operationData.deviceType.airConsumption) л/хв")
+                                Text(controller.workData.actualAirConsumption > 0 ? "\(Int(controller.workData.actualAirConsumption)) л/хв" : "\(Int(controller.workData.operationData.deviceType.airConsumption)) л/хв")
                                     .font(.body)
                                     .foregroundColor(.secondary)
                             }
