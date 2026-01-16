@@ -83,122 +83,6 @@ struct OperationWorkView: View {
         }
     }
 
-    // Функция для обработки ввода давления и ограничения
-    private func processPressureInput(_ input: String) -> String {
-        // Оставляем только цифры
-        let digitsOnly = input.filter { $0.isNumber }
-
-        // Ограничиваем до 3 цифр
-        let limitedDigits = String(digitsOnly.prefix(3))
-
-        // Преобразуем в число и проверяем ограничения
-        if let pressureValue = Int(limitedDigits), pressureValue > 0 {
-            // Получаем максимально допустимое давление
-            let minPressureInTeam = controller.getMinPressureInTeam()
-            
-            // Если уже было введено давление ранее, используем его как максимум
-            // (давление может только падать, не расти)
-            let maxAllowedPressure: Int
-            if controller.workData.minPressure > 0 {
-                // Берём минимум из начального давления команды и последнего введённого
-                maxAllowedPressure = min(minPressureInTeam, controller.workData.minPressure)
-            } else {
-                // Первый ввод - ограничиваем начальным давлением команды
-                maxAllowedPressure = minPressureInTeam
-            }
-            
-            if pressureValue > maxAllowedPressure {
-                // Если введенное значение больше максимально допустимого, ограничиваем его
-                return String(maxAllowedPressure)
-            }
-        }
-
-        return limitedDigits
-    }
-
-    // Функция для пересчета таймера "Залишок" при ручном вводе давления
-    private func recalculateRemainingTimer(for manualPressure: Int) {
-        print("🔧 Recalculating remaining timer for manual pressure: \(manualPressure)")
-
-        // Рассчитываем фактический расход воздуха на основе времени от начала операции
-        let entryTime = controller.workData.operationData.settings.entryTime ?? Date()
-        let currentTime = Date()
-        let elapsedTimeSeconds = currentTime.timeIntervalSince(entryTime)
-        let elapsedTimeMinutes = elapsedTimeSeconds / 60.0 // точное время с секундами
-        
-        // Получаем начальное давление
-        let initialPressure = controller.workData.initialMinPressure > 0 ? controller.workData.initialMinPressure : controller.getMinPressureInTeam()
-        
-        // Рассчитываем реальный расход воздуха
-        let actualAirConsumption = GasCalculator.calculateActualAirConsumption(
-            initialPressure: initialPressure,
-            currentPressure: manualPressure,
-            searchTimeMinutes: elapsedTimeMinutes,
-            deviceType: controller.workData.operationData.deviceType
-        )
-        
-        print("🔧 actualAirConsumption: \(String(format: "%.1f", actualAirConsumption)) л/мин (elapsed: \(String(format: "%.2f", elapsedTimeMinutes)) min)")
-
-        // Проверяем на повышенный расход воздуха
-        checkForHighAirConsumption(actualAirConsumption: actualAirConsumption)
-
-        // Рассчитываем таймер "Залишок" с учетом РЕАЛЬНОГО расхода воздуха
-        let deviceType = controller.workData.operationData.deviceType
-        let remainingPressure = Double(manualPressure) - Double(deviceType.reservePressure)
-        
-        let newRemainingTimer: TimeInterval
-        if remainingPressure > 0 {
-            let nBal = Double(deviceType.cylinderCount)
-            let vBal = Double(deviceType.cylinderVolume)
-            let remainingTimeMinutes = GasCalculator.calculateWorkTimeAir(
-                nBal: nBal,
-                vBal: vBal,
-                pRob: remainingPressure,
-                qVitr: actualAirConsumption,  // Используем РЕАЛЬНЫЙ расход!
-                pAtm: 1.0
-            )
-            newRemainingTimer = TimeInterval(remainingTimeMinutes * 60)
-        } else {
-            newRemainingTimer = 0
-        }
-        
-        print("🔧 New remaining timer: \(newRemainingTimer) seconds (based on actual consumption)")
-
-        // Рассчитываем protectionTime для совместимости (если используется где-то ещё)
-        let protectionTime = newRemainingTimer / 60.0
-
-        // Обновляем локальное отображение
-        displayRemainingTimer = newRemainingTimer
-
-        // Сохраняем изменения в глобальном состоянии через менеджер
-        var updatedWorkData = controller.workData
-        updatedWorkData.remainingTimer = newRemainingTimer
-        updatedWorkData.protectionTime = protectionTime
-        updatedWorkData.minPressure = manualPressure
-        updatedWorkData.actualAirConsumption = actualAirConsumption
-
-        // Обновляем controller.workData для немедленного обновления UI
-        controller.workData = updatedWorkData
-        
-        appState.activeOperationsManager.updateActiveOperation(updatedWorkData)
-    }
-
-    // Функция проверки на повышенный расход воздуха
-    private func checkForHighAirConsumption(actualAirConsumption: Double) {
-        let deviceType = controller.workData.operationData.deviceType
-        let standardConsumption = deviceType.airConsumption
-
-        print("🔍 Air consumption check: standard=\(standardConsumption), actual=\(actualAirConsumption)")
-
-        // Если фактический расход превышает стандартный в 2 раза, показываем предупреждение
-        let maxAllowedConsumption = standardConsumption * 2.0
-        if actualAirConsumption > maxAllowedConsumption {
-            controller.consumptionWarningMessage = "⚠️ УВАГА: Висока витрата повітря! \n(\(Int(actualAirConsumption)) л/хв) \n\nПеревірте щільність прилягання маски та зʼєднань апарату."
-            controller.showingConsumptionWarning = true
-            print("⚠️ High air consumption detected: \(actualAirConsumption) > \(maxAllowedConsumption)")
-        }
-    }
-
 
     var body: some View {
         NavigationView {
@@ -494,7 +378,7 @@ struct OperationWorkView: View {
                                     .multilineTextAlignment(.trailing)
                                     .onChange(of: manualPressureInput) { newValue in
                                         // Обрабатываем ввод и ограничиваем (только валидация, без перерасчета)
-                                        let processedValue = processPressureInput(newValue)
+                                        let processedValue = controller.processPressureInput(newValue)
                                         if processedValue != newValue {
                                             manualPressureInput = processedValue
                                         }
@@ -520,7 +404,7 @@ struct OperationWorkView: View {
                         .onReceive(keyboardHidePublisher) { _ in
                             // Перерасчет при скрытии клавиатуры
                             if let pressureValue = Int(manualPressureInput), pressureValue > 0 {
-                                recalculateRemainingTimer(for: pressureValue)
+                                controller.recalculateRemainingTimer(for: pressureValue)
                             }
                         }
                         .padding()
@@ -773,102 +657,6 @@ struct OperationWorkView: View {
         var buttonColor: Color {
             return buttonDisabled ? Color.gray : Color.blue
         }
-    
-    
-    // MARK: - Address Input View
-    struct AddressInputView: View {
-        @ObservedObject var locationService: LocationService
-        var onSave: () -> Void
-        var onCancel: () -> Void
-        @Environment(\.presentationMode) var presentationMode
-        
-        var body: some View {
-            NavigationView {
-                VStack(spacing: 20) {
-                    Text("Адреса роботи ланки:")
-                        .font(.headline)
-                        .padding(.top)
-
-                    HStack(spacing: 12) {
-                        TextField("Введіть адресу роботи", text: $locationService.currentAddress)
-                            .textFieldStyle(RoundedBorderTextFieldStyle())
-                            .padding(.horizontal)
-
-                        Button(action: {
-                            locationService.requestCurrentLocation()
-                        }) {
-                            ZStack {
-                                if locationService.isLoadingLocation {
-                                    ProgressView()
-                                        .progressViewStyle(CircularProgressViewStyle(tint: .blue))
-                                } else {
-                                    Image(systemName: "location.fill")
-                                        .font(.system(size: 20))
-                                        .foregroundColor(.blue)
-                                }
-                            }
-                            .frame(width: 44, height: 44)
-                        }
-                        .disabled(locationService.isLoadingLocation)
-                    }
-                    .padding(.horizontal)
-                    
-                    Spacer()
-                }
-                .hideKeyboardOnTapAndSwipe()
-                .navigationBarTitle("", displayMode: .inline)
-                .navigationBarItems(
-                    leading: Button("Скасувати") {
-                        onCancel()
-                    },
-                    trailing: Button("ОК") {
-                        onSave()
-                    }
-                        .disabled(locationService.currentAddress.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                )
-            }
-        }
-    }
-    
-    // MARK: - Team Info View
-    struct TeamInfoView: View {
-        let members: [OperationMember]
-        @Environment(\.presentationMode) var presentationMode
-        
-        var body: some View {
-            NavigationView {
-                List(members) { member in
-                    HStack {
-                        Image(systemName: member.role.iconName)
-                            .foregroundColor(
-                                member.role.iconColor == "systemOrange" ? .orange :
-                                    member.role.iconColor == "systemRed" ? .red :
-                                    member.role.iconColor == "systemGreen" ? .green : .gray
-                            )
-                            .frame(width: 30, height: 30)
-                        
-                        VStack(alignment: .leading) {
-                            Text(member.fullName)
-                                .font(.body)
-                            Text(member.role.displayName)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        
-                        Spacer()
-                        
-                        Text("\(member.pressure) бар")
-                            .font(.body)
-                            .foregroundColor(.secondary)
-                    }
-                }
-                .navigationTitle("Члени ланки")
-                .navigationBarItems(trailing: Button("Готово") {
-                    presentationMode.wrappedValue.dismiss()
-                })
-            }
-        }
-    }
 }
 
     

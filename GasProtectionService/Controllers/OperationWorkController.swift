@@ -457,6 +457,123 @@ class OperationWorkController: NSObject, ObservableObject {
         return pressures.min() ?? 0
     }
     
+    // MARK: - Business Logic Methods (moved from View)
+    
+    /// Обработка ввода давления с валидацией и ограничениями
+    func processPressureInput(_ input: String) -> String {
+        // Оставляем только цифры
+        let digitsOnly = input.filter { $0.isNumber }
+        
+        // Ограничиваем до 3 цифр
+        let limitedDigits = String(digitsOnly.prefix(3))
+        
+        // Преобразуем в число и проверяем ограничения
+        if let pressureValue = Int(limitedDigits), pressureValue > 0 {
+            // Получаем максимально допустимое давление
+            let minPressureInTeam = getMinPressureInTeam()
+            
+            // Если уже было введено давление ранее, используем его как максимум
+            // (давление может только падать, не расти)
+            let maxAllowedPressure: Int
+            if workData.minPressure > 0 {
+                // Берём минимум из начального давления команды и последнего введённого
+                maxAllowedPressure = min(minPressureInTeam, workData.minPressure)
+            } else {
+                // Первый ввод - ограничиваем начальным давлением команды
+                maxAllowedPressure = minPressureInTeam
+            }
+            
+            if pressureValue > maxAllowedPressure {
+                // Если введенное значение больше максимально допустимого, ограничиваем его
+                return String(maxAllowedPressure)
+            }
+        }
+        
+        return limitedDigits
+    }
+    
+    /// Пересчет таймера "Залишок" при ручном вводе давления
+    func recalculateRemainingTimer(for manualPressure: Int) {
+        print("🔧 Recalculating remaining timer for manual pressure: \(manualPressure)")
+        
+        // Рассчитываем фактический расход воздуха на основе времени от начала операции
+        let entryTime = workData.operationData.settings.entryTime ?? Date()
+        let currentTime = Date()
+        let elapsedTimeSeconds = currentTime.timeIntervalSince(entryTime)
+        let elapsedTimeMinutes = elapsedTimeSeconds / 60.0 // точное время с секундами
+        
+        // Получаем начальное давление
+        let initialPressure = workData.initialMinPressure > 0 ? workData.initialMinPressure : getMinPressureInTeam()
+        
+        // Рассчитываем реальный расход воздуха
+        let actualAirConsumption = GasCalculator.calculateActualAirConsumption(
+            initialPressure: initialPressure,
+            currentPressure: manualPressure,
+            searchTimeMinutes: elapsedTimeMinutes,
+            deviceType: workData.operationData.deviceType
+        )
+        
+        print("🔧 actualAirConsumption: \(String(format: "%.1f", actualAirConsumption)) л/мин (elapsed: \(String(format: "%.2f", elapsedTimeMinutes)) min)")
+        
+        // Проверяем на повышенный расход воздуха
+        checkForHighAirConsumption(actualAirConsumption: actualAirConsumption)
+        
+        // Рассчитываем таймер "Залишок" с учетом РЕАЛЬНОГО расхода воздуха
+        let deviceType = workData.operationData.deviceType
+        let remainingPressure = Double(manualPressure) - Double(deviceType.reservePressure)
+        
+        let newRemainingTimer: TimeInterval
+        if remainingPressure > 0 {
+            let nBal = Double(deviceType.cylinderCount)
+            let vBal = Double(deviceType.cylinderVolume)
+            let remainingTimeMinutes = GasCalculator.calculateWorkTimeAir(
+                nBal: nBal,
+                vBal: vBal,
+                pRob: remainingPressure,
+                qVitr: actualAirConsumption,  // Используем РЕАЛЬНЫЙ расход!
+                pAtm: 1.0
+            )
+            newRemainingTimer = TimeInterval(remainingTimeMinutes * 60)
+        } else {
+            newRemainingTimer = 0
+        }
+        
+        print("🔧 New remaining timer: \(newRemainingTimer) seconds (based on actual consumption)")
+        
+        // Рассчитываем protectionTime для совместимости
+        let protectionTime = newRemainingTimer / 60.0
+        
+        // Сохраняем изменения
+        var updatedWorkData = workData
+        updatedWorkData.remainingTimer = newRemainingTimer
+        updatedWorkData.protectionTime = protectionTime
+        updatedWorkData.minPressure = manualPressure
+        updatedWorkData.actualAirConsumption = actualAirConsumption
+        
+        // Обновляем controller.workData
+        workData = updatedWorkData
+        
+        // Сохраняем в менеджер
+        saveChangesToManager()
+    }
+    
+    /// Проверка на повышенный расход воздуха
+    func checkForHighAirConsumption(actualAirConsumption: Double) {
+        let deviceType = workData.operationData.deviceType
+        let standardConsumption = deviceType.airConsumption
+        
+        print("🔍 Air consumption check: standard=\(standardConsumption), actual=\(actualAirConsumption)")
+        
+        // Если фактический расход превышает стандартный в 2 раза, показываем предупреждение
+        let maxAllowedConsumption = standardConsumption * 2.0
+        if actualAirConsumption > maxAllowedConsumption {
+            consumptionWarningMessage = "⚠️ УВАГА: Висока витрата повітря! \n(\(Int(actualAirConsumption)) л/хв) \n\nПеревірте щільність прилягання маски та зʼєднань апарату."
+            showingConsumptionWarning = true
+            print("⚠️ High air consumption detected: \(actualAirConsumption) > \(maxAllowedConsumption)")
+        }
+    }
+
+    
     /// Factory method to create correctly initialized OperationWorkData
     static func createInitialWorkData(from operationData: OperationData) -> OperationWorkData {
         print("🏭 Factory creating WorkData for \(operationData.deviceType.displayName)...")
