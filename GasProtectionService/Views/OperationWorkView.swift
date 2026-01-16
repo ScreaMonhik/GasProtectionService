@@ -20,6 +20,7 @@ struct OperationWorkView: View {
     @State private var displayExitTimer: TimeInterval = 0
     @State private var displayRemainingTimer: TimeInterval = 0
     @State private var displayCommunicationTimer: TimeInterval = 0
+    @State private var initialRemainingTimer: TimeInterval = 0 // Для расчета процента кислорода (100% baseline)
     @State private var manualPressureInput = ""
     var onSave: (CheckCommand) -> Void
 
@@ -75,6 +76,12 @@ struct OperationWorkView: View {
         displayExitTimer = currentOperation.exitTimer
         displayRemainingTimer = currentOperation.remainingTimer
         displayCommunicationTimer = currentOperation.communicationTimer
+        
+        // Устанавливаем начальное значение для расчета процента кислорода (только один раз)
+        if initialRemainingTimer == 0 && displayRemainingTimer > 0 {
+            initialRemainingTimer = displayRemainingTimer
+            print("📊 Set initial remaining timer baseline: \(initialRemainingTimer) seconds")
+        }
 
         print("🔄 UI Update: remainingTimer \(oldRemaining) -> \(displayRemainingTimer) (from operation: \(currentOperation.remainingTimer))")
 
@@ -213,89 +220,99 @@ struct OperationWorkView: View {
                             UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                         }
 
-                        // Manual Pressure Input Block - above timers
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("Найменший тиск в ланці")
-                                .font(.headline)
-                                .foregroundColor(.primary)
+                        // Monitoring Section - Cylinder + Info Blocks
+                        HStack(alignment: .top, spacing: 16) {
+                            // Left side - Oxygen cylinder visualization
+                            OxygenCylinderView(
+                                oxygenPercentage: calculateOxygenPercentage()
+                            )
+                            .frame(width: 80)
+                            
+                            // Right side - Monitoring blocks stacked vertically
+                            VStack(spacing: 16) {
+                                // Manual Pressure Input Block
+                                VStack(alignment: .leading, spacing: 12) {
+                                    Text("Найменший тиск в ланці")
+                                        .font(.headline)
+                                        .foregroundColor(.primary)
 
-                            HStack {
-                                Text("Тиск:")
-                                    .font(.body)
-                                    .foregroundColor(.primary)
-                                Spacer()
-                                TextField("Тиск", text: $manualPressureInput)
-                                    .frame(width: 80)
-                                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                                    .keyboardType(.numberPad)
-                                    .multilineTextAlignment(.trailing)
-                                    .onChange(of: manualPressureInput) { newValue in
-                                        // Обрабатываем ввод и ограничиваем (только валидация, без перерасчета)
-                                        let processedValue = controller.processPressureInput(newValue)
-                                        if processedValue != newValue {
-                                            manualPressureInput = processedValue
-                                        }
+                                    HStack {
+                                        Text("Тиск:")
+                                            .font(.body)
+                                            .foregroundColor(.primary)
+                                        Spacer()
+                                        TextField("Тиск", text: $manualPressureInput)
+                                            .frame(width: 80)
+                                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                                            .keyboardType(.numberPad)
+                                            .multilineTextAlignment(.trailing)
+                                            .onChange(of: manualPressureInput) { newValue in
+                                                // Обрабатываем ввод и ограничиваем (только валидация, без перерасчета)
+                                                let processedValue = controller.processPressureInput(newValue)
+                                                if processedValue != newValue {
+                                                    manualPressureInput = processedValue
+                                                }
 
-                                        // Обновляем lowestPressure сразу при изменении (без перерасчета расхода)
-                                        if let pressureValue = Int(processedValue), pressureValue > 0 {
-                                            controller.workData.lowestPressure = processedValue
-                                            appState.activeOperationsManager.updateActiveOperation(controller.workData)
-                                        }
+                                                // Обновляем lowestPressure сразу при изменении (без перерасчета расхода)
+                                                if let pressureValue = Int(processedValue), pressureValue > 0 {
+                                                    controller.workData.lowestPressure = processedValue
+                                                    appState.activeOperationsManager.updateActiveOperation(controller.workData)
+                                                }
+                                            }
                                     }
-                            }
 
-                            HStack {
-                                Text("Розхід:")
-                                    .font(.body)
-                                    .foregroundColor(.primary)
-                                Spacer()
-                                Text(controller.workData.actualAirConsumption > 0 ? "\(Int(controller.workData.actualAirConsumption)) л/хв" : "\(Int(controller.workData.operationData.deviceType.airConsumption)) л/хв")
-                                    .font(.body)
-                                    .foregroundColor(.secondary)
-                            }
-                        }
-                        .onReceive(keyboardHidePublisher) { _ in
-                            // Перерасчет при скрытии клавиатуры
-                            if let pressureValue = Int(manualPressureInput), pressureValue > 0 {
-                                controller.recalculateRemainingTimer(for: pressureValue)
-                            }
-                        }
-                        .padding()
-                        .background(Color(.systemGray6))
-                        .cornerRadius(12)
-                        .padding(.horizontal)
+                                    HStack {
+                                        Text("Розхід:")
+                                            .font(.body)
+                                            .foregroundColor(.primary)
+                                        Spacer()
+                                        Text(controller.workData.actualAirConsumption > 0 ? "\(Int(controller.workData.actualAirConsumption)) л/хв" : "\(Int(controller.workData.operationData.deviceType.airConsumption)) л/хв")
+                                            .font(.body)
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+                                .onReceive(keyboardHidePublisher) { _ in
+                                    // Перерасчет при скрытии клавиатуры
+                                    if let pressureValue = Int(manualPressureInput), pressureValue > 0 {
+                                        controller.recalculateRemainingTimer(for: pressureValue)
+                                    }
+                                }
+                                .padding()
+                                .background(Color(.systemGray6))
+                                .cornerRadius(12)
+                                
+                                // Remaining Timer Block
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Залишок")
+                                        .font(.headline)
+                                        .foregroundColor(.primary)
+                                    Text(controller.formatTime(displayRemainingTimer))
+                                        .font(.title2)
+                                        .fontWeight(.bold)
+                                        .foregroundColor(.blue)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding()
+                                .background(Color(.systemGray6))
+                                .cornerRadius(12)
+                                .contentShape(Rectangle())
 
-                        // Timers Block - always above button
-                        HStack(spacing: 16) {
-                            VStack(alignment: .leading) {
-                                Text("Залишок")
-                                    .font(.body)
-                                    .foregroundColor(.primary)
-                                Text(controller.formatTime(displayRemainingTimer))
-                                    .font(.title3)
-                                    .fontWeight(.bold)
-                                    .foregroundColor(.blue)
+                                // Communication Timer Block
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Звʼязок")
+                                        .font(.headline)
+                                        .foregroundColor(.primary)
+                                    Text(controller.formatTime(displayCommunicationTimer))
+                                        .font(.title2)
+                                        .fontWeight(.bold)
+                                        .foregroundColor(.green)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding()
+                                .background(Color(.systemGray6))
+                                .cornerRadius(12)
+                                .contentShape(Rectangle())
                             }
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color(.systemGray6))
-                            .cornerRadius(12)
-                            .contentShape(Rectangle())
-
-                            VStack(alignment: .leading) {
-                                Text("Звʼязок")
-                                    .font(.body)
-                                    .foregroundColor(.primary)
-                                Text(controller.formatTime(displayCommunicationTimer))
-                                    .font(.title3)
-                                    .fontWeight(.bold)
-                                    .foregroundColor(.green)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color(.systemGray6))
-                            .cornerRadius(12)
-                            .contentShape(Rectangle())
                         }
                         .padding(.horizontal)
 
@@ -509,6 +526,20 @@ struct OperationWorkView: View {
         
         var buttonColor: Color {
             return buttonDisabled ? Color.gray : Color.blue
+        }
+        
+        // Рассчитывает процент кислорода на основе оставшегося времени
+        private func calculateOxygenPercentage() -> Double {
+            // Если нет начального значения, возвращаем 100%
+            guard initialRemainingTimer > 0 else {
+                return 1.0
+            }
+            
+            // Процент = текущее оставшееся время / начальное оставшееся время
+            let percentage = displayRemainingTimer / initialRemainingTimer
+            
+            // Ограничиваем значение между 0 и 1
+            return max(0.0, min(1.0, percentage))
         }
 }
 
