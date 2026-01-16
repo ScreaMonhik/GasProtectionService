@@ -112,9 +112,9 @@ class GasCalculator {
         // Розрахунок реального расходу (л/хв)
         let actualConsumption = volumeSpent / effectiveSearchTime
         
-        // Обмежуємо мінімальний расход, але не максимальний
-        // щоб можна було виявити надмірне споживання і показати попередження
-        let minConsumption = deviceType.airConsumption * 0.5
+        // Мінімальний реалістичний расход залежить від типу апарату
+        // На практиці реальний расход не може бути меншим, інакше таймер стає нереально великим
+        let minConsumption = deviceType.minAirConsumption
         
         return max(minConsumption, actualConsumption)
     }

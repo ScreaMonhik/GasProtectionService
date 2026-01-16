@@ -91,12 +91,25 @@ struct OperationWorkView: View {
         // Ограничиваем до 3 цифр
         let limitedDigits = String(digitsOnly.prefix(3))
 
-        // Преобразуем в число и проверяем, не больше ли минимального давления в команде
+        // Преобразуем в число и проверяем ограничения
         if let pressureValue = Int(limitedDigits), pressureValue > 0 {
+            // Получаем максимально допустимое давление
             let minPressureInTeam = controller.getMinPressureInTeam()
-            if pressureValue > minPressureInTeam {
-                // Если введенное значение больше минимального давления в команде, ограничиваем его
-                return String(minPressureInTeam)
+            
+            // Если уже было введено давление ранее, используем его как максимум
+            // (давление может только падать, не расти)
+            let maxAllowedPressure: Int
+            if controller.workData.minPressure > 0 {
+                // Берём минимум из начального давления команды и последнего введённого
+                maxAllowedPressure = min(minPressureInTeam, controller.workData.minPressure)
+            } else {
+                // Первый ввод - ограничиваем начальным давлением команды
+                maxAllowedPressure = minPressureInTeam
+            }
+            
+            if pressureValue > maxAllowedPressure {
+                // Если введенное значение больше максимально допустимого, ограничиваем его
+                return String(maxAllowedPressure)
             }
         }
 
@@ -107,18 +120,7 @@ struct OperationWorkView: View {
     private func recalculateRemainingTimer(for manualPressure: Int) {
         print("🔧 Recalculating remaining timer for manual pressure: \(manualPressure)")
 
-        // Используем формулу расчета времени защитной работы аппарата
-        let protectionTime = GasCalculator.calculateProtectionTime(
-            minPressure: manualPressure,
-            deviceType: controller.workData.operationData.deviceType
-        )
-
-        let newRemainingTimer = TimeInterval(protectionTime * 60)
-
-        print("🔧 New protection time: \(protectionTime) min, remaining timer: \(newRemainingTimer) seconds")
-
         // Рассчитываем фактический расход воздуха на основе времени от начала операции
-        // Получаем время начала операции
         let entryTime = controller.workData.operationData.settings.entryTime ?? Date()
         let currentTime = Date()
         let elapsedTimeSeconds = currentTime.timeIntervalSince(entryTime)
@@ -127,7 +129,7 @@ struct OperationWorkView: View {
         // Получаем начальное давление
         let initialPressure = controller.workData.initialMinPressure > 0 ? controller.workData.initialMinPressure : controller.getMinPressureInTeam()
         
-        // Всегда рассчитываем реальный расход
+        // Рассчитываем реальный расход воздуха
         let actualAirConsumption = GasCalculator.calculateActualAirConsumption(
             initialPressure: initialPressure,
             currentPressure: manualPressure,
@@ -137,8 +139,33 @@ struct OperationWorkView: View {
         
         print("🔧 actualAirConsumption: \(String(format: "%.1f", actualAirConsumption)) л/мин (elapsed: \(String(format: "%.2f", elapsedTimeMinutes)) min)")
 
-        // Проверяем на повышенный расход воздуха (аналогично startWorkInDangerZone)
+        // Проверяем на повышенный расход воздуха
         checkForHighAirConsumption(actualAirConsumption: actualAirConsumption)
+
+        // Рассчитываем таймер "Залишок" с учетом РЕАЛЬНОГО расхода воздуха
+        let deviceType = controller.workData.operationData.deviceType
+        let remainingPressure = Double(manualPressure) - Double(deviceType.reservePressure)
+        
+        let newRemainingTimer: TimeInterval
+        if remainingPressure > 0 {
+            let nBal = Double(deviceType.cylinderCount)
+            let vBal = Double(deviceType.cylinderVolume)
+            let remainingTimeMinutes = GasCalculator.calculateWorkTimeAir(
+                nBal: nBal,
+                vBal: vBal,
+                pRob: remainingPressure,
+                qVitr: actualAirConsumption,  // Используем РЕАЛЬНЫЙ расход!
+                pAtm: 1.0
+            )
+            newRemainingTimer = TimeInterval(remainingTimeMinutes * 60)
+        } else {
+            newRemainingTimer = 0
+        }
+        
+        print("🔧 New remaining timer: \(newRemainingTimer) seconds (based on actual consumption)")
+
+        // Рассчитываем protectionTime для совместимости (если используется где-то ещё)
+        let protectionTime = newRemainingTimer / 60.0
 
         // Обновляем локальное отображение
         displayRemainingTimer = newRemainingTimer
@@ -246,7 +273,7 @@ struct OperationWorkView: View {
                                 }
                                 
                                 HStack {
-                                    Text("Час повернення ланки:")
+                                    Text("Час виходу ланки:")
                                         .font(.body)
                                         .foregroundColor(.primary)
                                     Spacer()
@@ -259,7 +286,7 @@ struct OperationWorkView: View {
                                 // Добавлено: Час пошуку осередку (показывается только после нахождения очага)
                                 if controller.workData.hasFoundFireSource {
                                     HStack {
-                                        Text("Час пошуку осередку")
+                                        Text("Час пошуку осередку:")
                                             .font(.body)
                                             .foregroundColor(.primary)
                                         Spacer()
@@ -456,7 +483,7 @@ struct OperationWorkView: View {
                                 .foregroundColor(.primary)
 
                             HStack {
-                                Text("Тиск")
+                                Text("Тиск:")
                                     .font(.body)
                                     .foregroundColor(.primary)
                                 Spacer()

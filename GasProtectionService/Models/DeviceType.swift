@@ -17,8 +17,6 @@ enum DeviceType: String, Codable, CaseIterable {
         return self.rawValue
     }
 
-
-
     var cylinderVolume: Double {
         switch self {
         case .dragerPSS3000, .msa:
@@ -56,6 +54,17 @@ enum DeviceType: String, Codable, CaseIterable {
             return 54.0  // л/мин для АСП-2
         case .msa:
             return 45.0  // л/мин для MSA
+        }
+    }
+    
+    var minAirConsumption: Double {
+        switch self {
+        case .dragerPSS3000, .dragerPSS4000:
+            return 36.0  // л/мин для Drager
+        case .asp2:
+            return 49.0  // л/мин для АСП-2
+        case .msa:
+            return 40.0  // л/мин для MSA
         }
     }
 }
