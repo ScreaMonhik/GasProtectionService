@@ -12,9 +12,11 @@ struct OxygenCylinderView: View {
     
     // Цвет баллона в зависимости от уровня кислорода
     private var cylinderColor: Color {
-        if oxygenPercentage > 0.6 {
+        if oxygenPercentage > 0.5 {
             return .green
-        } else if oxygenPercentage > 0.3 {
+        } else if oxygenPercentage > 0.25 {
+            return .yellow
+        } else if oxygenPercentage > 0.1 {
             return .orange
         } else {
             return .red
@@ -33,8 +35,8 @@ struct OxygenCylinderView: View {
                     )
                 
                 // Заполнение - просто прямоугольник снизу с clipShape
-                VStack {
-                    Spacer()
+                VStack(spacing: 0) {
+                    Spacer(minLength: 0)
                     Rectangle()
                         .fill(
                             LinearGradient(
@@ -75,8 +77,11 @@ struct CylinderShape: Shape {
     func path(in rect: CGRect) -> Path {
         var path = Path()
         
-        let valveHeight: CGFloat = rect.height * 0.1 // Высота вентиля
-        let valveWidth: CGFloat = rect.width * 0.4 // Ширина вентиля
+        // Настройка ширины баллона
+        let bodyWidthRatio: CGFloat = 0.66
+        
+        let valveHeight: CGFloat = rect.height * 0.05 // Высота вентиля
+        let valveWidth: CGFloat = rect.width * 0.2 // Ширина вентиля
         let bodyTop = valveHeight
         
         // Вентиль (верхняя узкая часть)
@@ -89,13 +94,16 @@ struct CylinderShape: Shape {
         path.addRoundedRect(in: valveRect, cornerSize: CGSize(width: 4, height: 4))
         
         // Основной корпус баллона (с закругленным низом)
+        let actualBodyWidth = rect.width * bodyWidthRatio
+        let bodyX = (rect.width - actualBodyWidth) / 2
+        
         let bodyRect = CGRect(
-            x: 0,
+            x: bodyX,
             y: bodyTop,
-            width: rect.width,
+            width: actualBodyWidth,
             height: rect.height - bodyTop
         )
-        path.addRoundedRect(in: bodyRect, cornerSize: CGSize(width: 12, height: 12))
+        path.addRoundedRect(in: bodyRect, cornerSize: CGSize(width: 20, height: 20))
         
         return path
     }
@@ -147,11 +155,15 @@ struct CylinderShape: Shape {
                 .font(.caption)
         }
         VStack {
-            OxygenCylinderView(oxygenPercentage: 0.05)
+            OxygenCylinderView(oxygenPercentage: 0.10)
                 .frame(width: 60, height: 200)
-            Text("5%")
+            Text("10%")
                 .font(.caption)
         }
     }
     .padding()
+}
+
+#Preview {
+    OxygenCylinderView(oxygenPercentage: 1.0)
 }
