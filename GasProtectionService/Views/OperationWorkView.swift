@@ -226,7 +226,8 @@ struct OperationWorkView: View {
                             OxygenCylinderView(
                                 oxygenPercentage: calculateOxygenPercentage()
                             )
-                            .frame(width: 80)
+//                            .frame(width: 80)
+                            .frame(width: 180, height: 450)
                             
                             // Right side - Monitoring blocks stacked vertically
                             VStack(spacing: 16) {

@@ -24,46 +24,71 @@ struct OxygenCylinderView: View {
     }
     
     var body: some View {
-        GeometryReader { geometry in
-            ZStack(alignment: .bottom) {
-                // Фон - пустой баллон (тусклый)
-                cylinderShape
-                    .fill(Color(.systemGray4).opacity(0.4))
-                    .overlay(
+        // 1. Оборачиваем всё в ZStack, чтобы наложить слои
+        ZStack(alignment: .center) {
+            
+            // СЛОЙ 1: Картинка на фоне
+            Image("draeger_harness")
+                .resizable()
+                .scaledToFit()
+            
+            // СЛОЙ 2: Твой код баллона
+            // Добавил внешний GeometryReader, чтобы узнать размер картинки и сделать отступы в %
+            GeometryReader { outerGeo in
+                
+                // === ТВОЙ ОРИГИНАЛЬНЫЙ КОД ВНУТРИ ===
+                GeometryReader { geometry in
+                    ZStack(alignment: .bottom) {
+                        // Фон - пустой баллон (тусклый)
                         cylinderShape
-                            .stroke(Color(.systemGray3), lineWidth: 2)
-                    )
-                
-                // Заполнение - просто прямоугольник снизу с clipShape
-                VStack(spacing: 0) {
-                    Spacer(minLength: 0)
-                    Rectangle()
-                        .fill(
-                            LinearGradient(
-                                gradient: Gradient(colors: [
-                                    cylinderColor.opacity(0.9),
-                                    cylinderColor
-                                ]),
-                                startPoint: .top,
-                                endPoint: .bottom
+                            .fill(Color(.systemGray4).opacity(0.4))
+                            .overlay(
+                                cylinderShape
+                                    .stroke(Color(.systemGray3), lineWidth: 2)
                             )
-                        )
-                        .frame(height: geometry.size.height * max(0, min(1, oxygenPercentage)))
+                        
+                        // Заполнение - просто прямоугольник снизу с clipShape
+                        VStack(spacing: 0) {
+                            Spacer(minLength: 0)
+                            Rectangle()
+                                .fill(
+                                    LinearGradient(
+                                        gradient: Gradient(colors: [
+                                            cylinderColor.opacity(0.9),
+                                            cylinderColor
+                                        ]),
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    )
+                                )
+                                .frame(height: geometry.size.height * max(0, min(1, oxygenPercentage)))
+                        }
+                        .clipShape(cylinderShape) // Обрезаем по форме баллона
+                        .shadow(color: cylinderColor.opacity(0.3), radius: 4, x: 0, y: 0)
+                        
+                        // Процент кислорода (текст)
+                        VStack {
+                            Spacer()
+                            Text("\(Int(oxygenPercentage * 100))%")
+                                .font(.system(size: geometry.size.width * 0.4)) // Сделал шрифт адаптивным
+                                .fontWeight(.bold)
+                                .foregroundColor(oxygenPercentage > 0.5 ? .white : .primary)
+                                .padding(.bottom, 8)
+                        }
+                    }
                 }
-                .clipShape(cylinderShape) // Обрезаем по форме баллона
-                .shadow(color: cylinderColor.opacity(0.3), radius: 4, x: 0, y: 0)
+                // === КОНЕЦ ТВОЕГО ОРИГИНАЛЬНОГО КОДА ===
                 
-                // Процент кислорода (текст)
-                VStack {
-                    Spacer()
-                    Text("\(Int(oxygenPercentage * 100))%")
-                        .font(.caption)
-                        .fontWeight(.bold)
-                        .foregroundColor(oxygenPercentage > 0.5 ? .white : .primary)
-                        .padding(.bottom, 8)
-                }
+                // === НАСТРОЙКИ ОТСТУПОВ ===
+                // Я поставил 28% с боков. Это оптимально для Drager.
+                .padding(.horizontal, outerGeo.size.width * 0.28)
+                // Отступы сверху и снизу в процентах от высоты
+                .padding(.vertical, outerGeo.size.height * 0.12)
+                .padding(.bottom, outerGeo.size.height * 0.04)
             }
         }
+        .scaleEffect(1.15)
+        .offset(y: -25)
     }
     
     // Форма баллона с вентилем сверху
@@ -78,10 +103,10 @@ struct CylinderShape: Shape {
         var path = Path()
         
         // Настройка ширины баллона
-        let bodyWidthRatio: CGFloat = 0.66
+        let bodyWidthRatio: CGFloat = 0.75 // Чуть расширил сам баллон внутри рамки
         
         let valveHeight: CGFloat = rect.height * 0.05 // Высота вентиля
-        let valveWidth: CGFloat = rect.width * 0.2 // Ширина вентиля
+        let valveWidth: CGFloat = rect.width * 0.3 // Ширина вентиля (чуть шире)
         let bodyTop = valveHeight
         
         // Вентиль (верхняя узкая часть)
@@ -112,19 +137,19 @@ struct CylinderShape: Shape {
 // Preview для тестирования
 #Preview("Full Cylinder") {
     OxygenCylinderView(oxygenPercentage: 1.0)
-        .frame(width: 80, height: 280)
+        .frame(width: 180, height: 400) // Пример хорошего размера
         .padding()
 }
 
 #Preview("Half Cylinder") {
     OxygenCylinderView(oxygenPercentage: 0.5)
-        .frame(width: 80, height: 280)
+        .frame(width: 180, height: 400)
         .padding()
 }
 
 #Preview("Low Cylinder") {
     OxygenCylinderView(oxygenPercentage: 0.2)
-        .frame(width: 80, height: 280)
+        .frame(width: 180, height: 400)
         .padding()
 }
 
@@ -132,31 +157,31 @@ struct CylinderShape: Shape {
     HStack(spacing: 20) {
         VStack {
             OxygenCylinderView(oxygenPercentage: 1.0)
-                .frame(width: 60, height: 200)
+                .frame(width: 80, height: 200)
             Text("100%")
                 .font(.caption)
         }
         VStack {
             OxygenCylinderView(oxygenPercentage: 0.75)
-                .frame(width: 60, height: 200)
+                .frame(width: 80, height: 200)
             Text("75%")
                 .font(.caption)
         }
         VStack {
             OxygenCylinderView(oxygenPercentage: 0.5)
-                .frame(width: 60, height: 200)
+                .frame(width: 80, height: 200)
             Text("50%")
                 .font(.caption)
         }
         VStack {
             OxygenCylinderView(oxygenPercentage: 0.25)
-                .frame(width: 60, height: 200)
+                .frame(width: 80, height: 200)
             Text("25%")
                 .font(.caption)
         }
         VStack {
             OxygenCylinderView(oxygenPercentage: 0.10)
-                .frame(width: 60, height: 200)
+                .frame(width: 80, height: 200)
             Text("10%")
                 .font(.caption)
         }
